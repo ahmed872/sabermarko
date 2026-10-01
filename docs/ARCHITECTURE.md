@@ -54,3 +54,15 @@ Expected cash = opening + Σ cash movements (cash sales, refunds, expenses from 
 
 ## Backup
 `.sbmbak` = magic line + JSON header (app id, schema version, app version, SHA-256, size) + gzip of an online SQLite snapshot. Restore validates checksum, gzip, `integrity_check`, app id and schema version, takes a safety backup of the current data, swaps the file atomically and rolls back on any failure.
+
+## Verification tooling (not shipped)
+- `scripts/sim/` — one-year store simulation (`simulate.ts`), an independent SQL-only verifier (`verify.ts`),
+  backup/restore/recovery/performance tests (`restore-tests.ts`) and the report generator (`report.mjs`).
+  Built with `npm run sim:build` into `dist/sim/`, which `electron-builder.yml` excludes from every installer.
+  The simulator refuses to write into an application data folder and marks its output `SIMULATION-ONLY.txt`.
+  Results: [SIMULATION_REPORT.md](SIMULATION_REPORT.md).
+- `tools/release/` — release gate (version/changelog/production license key), secret scanner used by the
+  `.githooks/pre-commit` hook and CI. `tools/license/` — vendor key generation (private key always outside the
+  repository), license issuing and verification.
+- `.github/workflows/ci.yml` (Linux: typecheck, unit, E2E, short simulation; Windows: typecheck, unit) and
+  `.github/workflows/release.yml` (tag `vX.Y.Z`: Windows NSIS build, tests, SHA256, install smoke test, GitHub Release).
