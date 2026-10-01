@@ -118,17 +118,25 @@ export default function POS() {
     addLine(p, p.matchedUnitId);
   }, [addLine]);
 
-  const onSearchEnter = async () => {
-    const term = q.trim();
+  /**
+   * Barcode scanners type the code and press Enter faster than a lookup completes, often the same
+   * code twice in a row (two identical cans). So on Enter the code is taken and the box is freed at
+   * once, and lookups run one after another in scan order — no scan is ever lost or reordered.
+   */
+  const scanQueue = useRef<Promise<void>>(Promise.resolve());
+  const onSearchEnter = (raw: string) => {
+    const term = raw.trim();
     if (!term) { if (lines.length) setDialog({ kind: 'pay' }); return; }
-    try {
-      const r = await api<{ exact: boolean; items: PProduct[] }>('pos.search', { q: term, limit: 20 });
-      // only clear the box if it still holds this term: a fast scanner may already be typing the next barcode
-      const clear = () => setQ((cur) => (cur.trim() === term ? '' : cur));
-      if (r.exact && r.items.length === 1) { await pick(r.items[0]); clear(); return; }
-      if (r.items.length === 1) { await pick(r.items[0]); clear(); return; }
-      if (!r.items.length) toast(`لا يوجد منتج بالاسم أو الكود "${term}"`, 'error');
-    } catch (e) { toast((e as Error).message, 'error'); }
+    setQ('');
+    const restore = () => setQ((cur) => cur || term); // show the term again (typo / several matches) unless a new scan started
+    scanQueue.current = scanQueue.current.then(async () => {
+      try {
+        const r = await api<{ exact: boolean; items: PProduct[] }>('pos.search', { q: term, limit: 20 });
+        if (r.items.length === 1) { await pick(r.items[0]); return; }
+        if (!r.items.length) toast(`لا يوجد منتج بالاسم أو الكود "${term}"`, 'error');
+        restore();
+      } catch (e) { toast((e as Error).message, 'error'); restore(); }
+    });
   };
 
   const updateLine = (key: string, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -264,7 +272,7 @@ export default function POS() {
           <div className="search-wrap">
             <Search size={20} />
             <input ref={searchRef} className="input" autoFocus placeholder="ابحث باسم المنتج أو الكود أو امسح الباركود…  (F2)" value={q}
-              onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void onSearchEnter(); } }} />
+              onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSearchEnter(e.currentTarget.value); } }} />
           </div>
           {q && <button className="btn icon lg" onClick={() => { setQ(''); focusSearch(); }} aria-label="مسح البحث"><X size={18} /></button>}
         </div>

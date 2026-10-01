@@ -43,6 +43,12 @@ jobs:
           $h = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower()
           "$h  $($f.Name)" | Out-File -Encoding ascii -NoNewline release/SHA256SUMS.txt
           Get-Content release/SHA256SUMS.txt
+      - name: Report code-signing status (no certificate -> expected NotSigned)
+        shell: pwsh
+        run: |
+          $f = (Get-ChildItem release -Filter 'SaberMarko-POS-Setup-*.exe' | Select-Object -First 1).FullName
+          $s = Get-AuthenticodeSignature $f
+          Write-Host "Authenticode status of $(Split-Path $f -Leaf): $($s.Status)"
       - name: Smoke-test the installer (silent install, files present, silent uninstall)
         shell: pwsh
         run: |

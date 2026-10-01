@@ -29,6 +29,8 @@ jobs:
       - run: npm run typecheck:sim
       - run: npm test
       - run: npm run build
+      - name: Build the demo-store generator used by one E2E test (never shipped)
+        run: node scripts/build-main.mjs --tools
       - name: End-to-end tests (real Electron app under Xvfb)
         run: xvfb-run -a npx playwright test
       - name: Short store simulation + independent verification
