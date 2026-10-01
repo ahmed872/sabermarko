@@ -3,6 +3,7 @@ import { normalizeArabic } from '../../shared/arabic';
 import { productInput, type ProductInput } from '../../shared/schemas';
 import { type Ctx, audit, can, defaultLocationId, getSetting, requirePerm, ts, tx } from './context';
 import { receiveStock } from './inventory';
+import { packJoin } from './pack';
 
 export interface UnitRow { id: number; name: string; symbol: string; kind: string; allow_decimal: number; is_system: number; active: number }
 
@@ -72,6 +73,16 @@ function resolveBrand(ctx: Ctx, brandId: number | null | undefined, brandName: s
   return Number(ctx.db.prepare('INSERT INTO brands(name) VALUES (?)').run(n).lastInsertRowid);
 }
 
+/** A product counted in pieces (or cans, dozens…) is sold by count: never weighed, and no gram/ml sub-units. */
+function assertUnitsFit(ctx: Ctx, base: UnitRow, units: ProductInput['units']) {
+  if (base.kind !== 'count') return;
+  for (const u of units ?? []) {
+    const k = ctx.db.prepare('SELECT name, kind FROM units WHERE id = ?').get(u.unitId) as { name: string; kind: string } | undefined;
+    if (!k) throw new AppError('INVALID_UNIT');
+    if (k.kind !== 'count') throw new AppError('VALIDATION', { detail: `المنتج يُباع بالعدد (${base.name})؛ لا يمكن إضافة وحدة وزن أو حجم (${k.name}) له. للبيع بالوزن اختر "كيلو" كوحدة أساسية.` });
+  }
+}
+
 function writeUnits(ctx: Ctx, productId: number, baseUnitId: number, units: ProductInput['units']) {
   const db = ctx.db;
   const list = (units ?? []).filter((u) => u.unitId !== baseUnitId);
@@ -124,6 +135,7 @@ export function createProduct(ctx: Ctx, raw: ProductInput) {
     assertCodesFree(ctx, null, [barcode, ...input.units.map((u) => cleanCode(u.barcode))], sku);
     const unit = ctx.db.prepare('SELECT * FROM units WHERE id = ?').get(input.baseUnitId) as UnitRow | undefined;
     if (!unit) throw new AppError('INVALID_UNIT');
+    assertUnitsFit(ctx, unit, input.units);
     const now = ts(ctx);
     const cost = input.cost ?? 0;
     const info = ctx.db.prepare(
@@ -133,7 +145,7 @@ export function createProduct(ctx: Ctx, raw: ProductInput) {
     ).run({
       name: input.name, short: input.shortName ?? null, cat: input.categoryId ?? null, brand: resolveBrand(ctx, input.brandId, input.brandName),
       grp: resolveGroup(ctx, input.groupName), variant: input.variantName ?? null, unit: input.baseUnitId, sku, barcode, price: input.sellPrice,
-      cost, min: input.minStock, reorder: input.reorderQty ?? null, weighted: input.isWeighted || unit.kind === 'weight' ? 1 : 0,
+      cost, min: input.minStock, reorder: input.reorderQty ?? null, weighted: unit.kind === 'weight' || (input.isWeighted && unit.kind !== 'count') ? 1 : 0,
       expiry: input.trackExpiry ? 1 : 0, tax: input.taxRate ?? null, supplier: input.defaultSupplierId ?? null, fav: input.isFavorite ? 1 : 0,
       disc: input.allowDiscount ? 1 : 0, image: input.image ?? null, notes: input.notes ?? null, active: input.active ? 1 : 0, now,
     });
@@ -178,6 +190,7 @@ export function updateProduct(ctx: Ctx, id: number, raw: ProductInput) {
     }
     const unit = ctx.db.prepare('SELECT * FROM units WHERE id = ?').get(input.baseUnitId) as UnitRow | undefined;
     if (!unit) throw new AppError('INVALID_UNIT');
+    assertUnitsFit(ctx, unit, input.units);
     ctx.db.prepare(
       `UPDATE products SET name=@name, short_name=@short, category_id=@cat, brand_id=@brand, group_id=@grp, variant_name=@variant, base_unit_id=@unit,
         sku=@sku, barcode=@barcode, sell_price=@price, avg_cost=@cost, min_stock=@min, reorder_qty=@reorder, is_weighted=@weighted, track_expiry=@expiry,
@@ -187,7 +200,7 @@ export function updateProduct(ctx: Ctx, id: number, raw: ProductInput) {
       id, name: input.name, short: input.shortName ?? null, cat: input.categoryId ?? null, brand: resolveBrand(ctx, input.brandId, input.brandName),
       grp: resolveGroup(ctx, input.groupName), variant: input.variantName ?? null, unit: input.baseUnitId, sku, barcode, price: input.sellPrice,
       cost: costChanged ? input.cost : cur.avg_cost, min: input.minStock, reorder: input.reorderQty ?? null,
-      weighted: input.isWeighted || unit.kind === 'weight' ? 1 : 0, expiry: input.trackExpiry ? 1 : 0, tax: input.taxRate ?? null,
+      weighted: unit.kind === 'weight' || (input.isWeighted && unit.kind !== 'count') ? 1 : 0, expiry: input.trackExpiry ? 1 : 0, tax: input.taxRate ?? null,
       supplier: input.defaultSupplierId ?? null, fav: input.isFavorite ? 1 : 0, disc: input.allowDiscount ? 1 : 0, image: input.image ?? null,
       notes: input.notes ?? null, active: input.active ? 1 : 0, now: ts(ctx),
     });
@@ -249,8 +262,8 @@ export function getProduct(ctx: Ctx, id: number): any {
   requirePerm(ctx, 'products.view');
   const p = ctx.db.prepare(
     `SELECT p.*, c.name AS category_name, b.name AS brand_name, g.name AS group_name, u.name AS unit_name, u.symbol AS unit_symbol,
-            u.allow_decimal, s.name AS supplier_name
-     FROM products p JOIN units u ON u.id = p.base_unit_id LEFT JOIN categories c ON c.id = p.category_id
+            u.allow_decimal, s.name AS supplier_name, pk.factor AS pack_factor, pku.symbol AS pack_symbol
+     FROM products p JOIN units u ON u.id = p.base_unit_id ${packJoin('u')} LEFT JOIN categories c ON c.id = p.category_id
      LEFT JOIN brands b ON b.id = p.brand_id LEFT JOIN product_groups g ON g.id = p.group_id LEFT JOIN suppliers s ON s.id = p.default_supplier_id
      WHERE p.id = ?`,
   ).get(id) as Record<string, any> | undefined;
@@ -314,8 +327,9 @@ export function listProducts(ctx: Ctx, query: ProductListQuery = {}) {
   const rows = ctx.db.prepare(
     `SELECT p.id, p.name, p.short_name, p.variant_name, p.barcode, p.sku, p.sell_price, ${showCost ? 'p.avg_cost' : 'NULL AS avg_cost'}, p.min_stock, p.active,
             p.is_weighted, p.track_expiry, p.is_favorite, c.name AS category_name, b.name AS brand_name, u.symbol AS unit_symbol, u.allow_decimal,
-            ${stockExpr} AS stock
+            ${stockExpr} AS stock, pk.factor AS pack_factor, pku.symbol AS pack_symbol
      FROM products p JOIN units u ON u.id = p.base_unit_id LEFT JOIN categories c ON c.id = p.category_id LEFT JOIN brands b ON b.id = p.brand_id
+     ${packJoin('u')}
      ${where} ORDER BY ${order} LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
   ).all(params);
   const total = (ctx.db.prepare(`SELECT COUNT(*) AS n FROM products p ${where}`).get(params) as { n: number }).n;

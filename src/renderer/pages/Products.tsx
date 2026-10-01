@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Package, Plus, Search, Star, Tags, Upload } from 'lucide-react';
 import { api } from '../lib/api';
 import { useApp } from '../lib/app';
-import { money, qty } from '../lib/format';
+import { money, packQty, qty } from '../lib/format';
 import { Empty, Loading, Modal, PageHeader, Pager, useAction } from '../components/ui';
 import { parseDecimal } from '../../shared/arabic';
 
@@ -69,7 +69,7 @@ export default function Products() {
                     <td className="n bold">{money(p.sell_price)}<span className="xs muted"> / {p.unit_symbol}</span></td>
                     {can('reports.cost') && <td className="n muted">{p.avg_cost ? money(Math.round(p.avg_cost)) : '—'}</td>}
                     <td className="n">
-                      <span className={p.stock < 0 ? 'danger-text bold' : p.min_stock > 0 && p.stock <= p.min_stock ? 'warning-text bold' : ''}>{qty(p.stock)}</span> <span className="xs muted">{p.unit_symbol}</span>
+                      <span className={p.stock < 0 ? 'danger-text bold' : p.min_stock > 0 && p.stock <= p.min_stock ? 'warning-text bold' : ''}>{qty(p.stock)}</span> <span className="xs muted">{p.unit_symbol}</span>{p.pack_factor && p.stock >= p.pack_factor ? <div className="xs muted">{packQty(p.stock, p.pack_factor, p.pack_symbol, p.unit_symbol)}</div> : null}
                     </td>
                     <td>{!p.active && <span className="badge">موقوف</span>}{p.min_stock > 0 && p.stock <= p.min_stock && p.active ? <span className="badge warning">منخفض</span> : null}</td>
                   </tr>

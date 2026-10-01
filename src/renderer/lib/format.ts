@@ -55,3 +55,12 @@ export function daysAgo(s: string | null | undefined) {
 }
 
 export const METHOD_LABEL: Record<string, string> = { cash: 'نقدي', card: 'كارت', wallet: 'محفظة', credit: 'آجل', bank: 'تحويل' };
+
+/** "10 كرتونة + 5 قطعة" for a quantity (milli of the base unit) of a product shelved in packs of `factor`. */
+export function packQty(total: number, factor: number, pack: string, unit: string): string {
+  const sign = total < 0 ? '-' : '';
+  const t = Math.abs(total);
+  const packs = Math.floor(t / factor);
+  const rest = t - packs * factor;
+  return sign + ([packs ? `${packs} ${pack}` : '', rest ? `${qty(rest)} ${unit}` : ''].filter(Boolean).join(' + ') || `0 ${unit}`);
+}

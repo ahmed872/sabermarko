@@ -1,7 +1,7 @@
 {
   "name": "sabermarko",
   "productName": "SaberMarko POS",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "نظام نقاط بيع وإدارة محلات التجزئة والسوبر ماركت",
   "main": "dist/main/index.js",
   "author": "SaberMarko Software",

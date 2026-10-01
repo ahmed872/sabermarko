@@ -41,20 +41,25 @@ export async function setup(page: Page) {
   await expect(page.getByText(/(صباح|مساء) الخير، أحمد المدير/)).toBeVisible();
 }
 
-export async function addProduct(page: Page, p: { name: string; price: string; cost: string; qty: string; unit?: string; barcode?: string; fav?: boolean }) {
+export async function addProduct(page: Page, p: { name: string; price: string; cost: string; qty: string; unit?: string; barcode?: string; fav?: boolean; pack?: { unit: string; count: string; packs?: string } }) {
   await go(page, '/products/new');
   await page.locator('#pname').fill(p.name);
-  if (p.unit) await page.locator('select').nth(1).selectOption({ label: p.unit });
-  const money = page.locator('input.num-input');
-  await money.nth(0).fill(p.price);
-  await money.nth(1).fill(p.cost);
-  if (p.barcode) await money.nth(2).fill(p.barcode);
-  await money.nth(4).fill(p.qty);
+  if (p.unit === 'كيلو') await page.getByRole('button', { name: /بالوزن \(كيلو\)/ }).click();
+  else if (p.unit) await page.locator('#p-base-unit').selectOption({ label: p.unit });
+  if (p.pack) {
+    await page.locator('#p-selling .switch').click();
+    await page.locator('#p-pack-unit').selectOption({ label: p.pack.unit });
+    await page.locator('#p-pack-count').fill(p.pack.count);
+    if (p.pack.packs) await page.locator('#p-opening-packs').fill(p.pack.packs);
+  }
+  await page.locator('#p-price').fill(p.price);
+  await page.locator('#p-cost').fill(p.cost);
+  if (p.barcode) await page.locator('#p-barcode').fill(p.barcode);
+  await page.locator('#p-opening').fill(p.qty);
   if (p.fav) await page.locator('.switch').first().click();
   await page.getByRole('button', { name: 'حفظ', exact: true }).click();
   await expect(page.locator('.page-header h1')).toContainText(p.name);
 }
-
 
 export async function loginAs(page: Page, fullName: string, password: string) {
   // with several users the login screen shows name buttons (loaded asynchronously); with one user it is pre-filled

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { HashRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { AppProvider, useApp } from './lib/app';
 import { ConfirmProvider, Loading, ToastProvider } from './components/ui';
 import { ApprovalProvider } from './components/Approval';
@@ -11,6 +11,8 @@ const POS = lazy(() => import('./pages/POS'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Products = lazy(() => import('./pages/Products'));
 const ProductForm = lazy(() => import('./pages/ProductForm'));
+/** a fresh form per product: never carry one product's fields into another (or into "new product") */
+function ProductFormKeyed() { const { id } = useParams(); return <ProductForm key={`edit-${id}`} />; }
 const ProductDetail = lazy(() => import('./pages/ProductDetail'));
 const Catalog = lazy(() => import('./pages/Catalog'));
 const Inventory = lazy(() => import('./pages/Inventory'));
@@ -72,9 +74,9 @@ function Root() {
             <Route path="pos" element={<Guard perm="pos.sell"><POS /></Guard>} />
             <Route path="insights" element={<Guard perm="reports.view"><Insights /></Guard>} />
             <Route path="products" element={<Guard perm="products.view"><Products /></Guard>} />
-            <Route path="products/new" element={<Guard perm="products.manage"><ProductForm /></Guard>} />
+            <Route path="products/new" element={<Guard perm="products.manage"><ProductForm key="new" /></Guard>} />
             <Route path="products/:id" element={<Guard perm="products.view"><ProductDetail /></Guard>} />
-            <Route path="products/:id/edit" element={<Guard perm="products.manage"><ProductForm /></Guard>} />
+            <Route path="products/:id/edit" element={<Guard perm="products.manage"><ProductFormKeyed /></Guard>} />
             <Route path="catalog" element={<Guard perm="products.manage"><Catalog /></Guard>} />
             <Route path="inventory/*" element={<Guard perm="inventory.view"><Inventory /></Guard>} />
             <Route path="stocktake/*" element={<Guard perm="inventory.stocktake"><Stocktake /></Guard>} />

@@ -5,6 +5,7 @@ import { adjustmentInput, transferInput, type AdjustmentInput } from '../../shar
 import {
   type Ctx, audit, can, defaultLocationId, docNo, getSetting, requirePerm, today, ts, tx,
 } from './context';
+import { packJoin } from './pack';
 
 export type MovementType =
   | 'opening' | 'purchase' | 'sale' | 'sale_return' | 'purchase_return' | 'stocktake'
@@ -391,8 +392,9 @@ export function getStocktake(ctx: Ctx, id: number, opts: { q?: string; onlyDiff?
   if (opts.onlyDiff) conds.push(`i.counted_qty IS NOT NULL AND i.counted_qty <> ${sysExpr}`);
   const items = ctx.db.prepare(
     `SELECT i.product_id, p.name, p.barcode, p.sku, un.symbol AS unit_symbol, un.allow_decimal, ${sysExpr} AS system_qty, i.counted_qty, i.unit_cost,
-            c.name AS category_name
+            c.name AS category_name, pk.factor AS pack_factor, pku.symbol AS pack_symbol
      FROM stocktake_items i JOIN products p ON p.id = i.product_id JOIN units un ON un.id = p.base_unit_id
+     ${packJoin('un')}
      LEFT JOIN categories c ON c.id = p.category_id
      WHERE ${conds.join(' AND ')} ORDER BY c.name, p.name LIMIT 2000`,
   ).all({ id, loc: st.location_id, q: `%${normalizeArabic(opts.q)}%`, raw: opts.q ?? '' });

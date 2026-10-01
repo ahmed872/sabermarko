@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Archive, Edit, History, PackagePlus, Star, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useApp } from '../lib/app';
-import { dateOnly, dateTime, money, qty } from '../lib/format';
+import { dateOnly, dateTime, money, packQty, qty } from '../lib/format';
 import { Empty, Loading, PageHeader, Stat, Tabs, useAction, useConfirm } from '../components/ui';
 import { MOVEMENT_LABEL } from './Inventory';
 import { AdjustDialog } from './Inventory';
@@ -44,7 +44,7 @@ export default function ProductDetail() {
       <div className="grid grid-4 mb">
         <Stat label="سعر البيع" value={<span className="num">{money(d.sell_price)}</span>} hint={`لكل ${d.unit_name}`} />
         {d.avg_cost !== null && <Stat label="متوسط التكلفة" value={<span className="num">{money(Math.round(d.avg_cost))}</span>} hint={d.sell_price > 0 ? `هامش ${(((d.sell_price - d.avg_cost) / d.sell_price) * 100).toFixed(1)}%` : undefined} />}
-        <Stat label="المخزون الحالي" value={<span className={`num ${d.totalQty < 0 ? 'danger-text' : ''}`}>{qty(d.totalQty)} {d.unit_symbol}</span>} hint={d.min_stock > 0 ? `الحد الأدنى ${qty(d.min_stock)}` : undefined} />
+        <Stat label="المخزون الحالي" value={<span className={`num ${d.totalQty < 0 ? 'danger-text' : ''}`}>{qty(d.totalQty)} {d.unit_symbol}</span>} hint={[d.pack_factor && Math.abs(d.totalQty) >= d.pack_factor ? packQty(d.totalQty, d.pack_factor, d.pack_symbol, d.unit_symbol) : '', d.min_stock > 0 ? `الحد الأدنى ${qty(d.min_stock)}` : ''].filter(Boolean).join(' — ') || undefined} />
         {d.avg_cost !== null && <Stat label="قيمة المخزون (بالتكلفة)" value={<span className="num">{money(Math.max(0, Math.round((d.totalQty * d.avg_cost) / 1000)))}</span>} />}
       </div>
       {(d.units.length > 1 || d.stock.length > 1 || d.variants.length > 0) && (

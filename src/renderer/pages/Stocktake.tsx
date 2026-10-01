@@ -4,8 +4,8 @@ import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { CheckCircle2, ClipboardList, Plus, Search } from 'lucide-react';
 import { api } from '../lib/api';
 import { useApp } from '../lib/app';
-import { dateTime, money, qty } from '../lib/format';
-import { Empty, Field, Loading, Modal, PageHeader, QtyInput, Segmented, Stat, useAction, useConfirm, useToast } from '../components/ui';
+import { dateTime, money, packQty, qty } from '../lib/format';
+import { Empty, Field, Loading, Modal, NumberInput, PageHeader, QtyInput, Segmented, Stat, useAction, useConfirm, useToast } from '../components/ui';
 
 export default function Stocktake() {
   return <Routes><Route index element={<StocktakeList />} /><Route path=":id" element={<StocktakeSheet />} /></Routes>;
@@ -98,15 +98,18 @@ function StocktakeSheet() {
         </div>
         <div className="table-wrap" style={{ maxHeight: 'calc(100vh - 330px)' }}>
           <table className="table">
-            <thead><tr><th>المنتج</th><th>التصنيف</th><th className="n">بالنظام</th><th style={{ width: 170 }}>الفعلي</th><th className="n">الفرق</th>{can('reports.cost') && <th className="n">قيمة الفرق</th>}</tr></thead>
+            <thead><tr><th>المنتج</th><th>التصنيف</th><th className="n">بالنظام</th><th style={{ width: 230 }}>الفعلي</th><th className="n">الفرق</th>{can('reports.cost') && <th className="n">قيمة الفرق</th>}</tr></thead>
             <tbody>{d.items.map((i: any) => {
               const c = counts[i.product_id];
               const diff = c === null || c === undefined ? null : c - i.system_qty;
               return (
                 <tr key={i.product_id}>
                   <td className="bold">{i.name}<div className="xs muted num">{i.barcode ?? i.sku ?? ''}</div></td><td className="small">{i.category_name ?? '—'}</td>
-                  <td className="n">{qty(i.system_qty)} <span className="xs muted">{i.unit_symbol}</span></td>
-                  <td>{open ? <QtyInput value={c ?? null} allowEmpty onChange={(v) => setCounts((x) => ({ ...x, [i.product_id]: v }))} onBlur={() => void save(i.product_id, counts[i.product_id] ?? null)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} placeholder="—" /> : <span className="num">{c === null || c === undefined ? '—' : qty(c)}</span>}</td>
+                  <td className="n">{qty(i.system_qty)} <span className="xs muted">{i.unit_symbol}</span>{i.pack_factor && i.system_qty > 0 ? <div className="xs muted">{packQty(i.system_qty, i.pack_factor, i.pack_symbol, i.unit_symbol)}</div> : null}</td>
+                  <td>{open ? (i.pack_factor
+                    ? <PackCount key={`${i.product_id}:${i.counted_qty}`} value={c ?? null} factor={i.pack_factor} packName={i.pack_symbol} unitName={i.unit_symbol} onChange={(v) => setCounts((x) => ({ ...x, [i.product_id]: v }))} onCommit={(v) => void save(i.product_id, v)} />
+                    : <QtyInput value={c ?? null} allowEmpty onChange={(v) => setCounts((x) => ({ ...x, [i.product_id]: v }))} onBlur={() => void save(i.product_id, counts[i.product_id] ?? null)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} placeholder="—" />)
+                    : <span className="num">{c === null || c === undefined ? '—' : i.pack_factor ? packQty(c, i.pack_factor, i.pack_symbol, i.unit_symbol) : qty(c)}</span>}</td>
                   <td className={`n bold ${diff === null ? '' : diff < 0 ? 'danger-text' : diff > 0 ? 'success-text' : ''}`}>{diff === null ? '—' : `${diff > 0 ? '+' : ''}${qty(diff)}`}</td>
                   {can('reports.cost') && <td className="n">{diff ? money(Math.round((diff * i.unit_cost) / 1000)) : '—'}</td>}
                 </tr>
@@ -116,6 +119,23 @@ function StocktakeSheet() {
           {!d.items.length && <Empty title="لا توجد أصناف مطابقة" />}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Shelf count in packs + loose pieces (10 cartons and 5 bags), stored as one quantity of the base unit. */
+function PackCount({ value, factor, packName, unitName, onChange, onCommit }: { value: number | null; factor: number; packName: string; unitName: string; onChange: (v: number | null) => void; onCommit: (v: number | null) => void }) {
+  const [packs, setPacks] = useState<number | null>(value === null ? null : Math.floor(value / factor));
+  const [loose, setLoose] = useState<number | null>(value === null ? null : value - Math.floor(value / factor) * factor);
+  const total = (p: number | null, l: number | null) => (p === null && l === null ? null : (p ?? 0) * factor + (l ?? 0));
+  const commitOnLeave = (e: React.FocusEvent<HTMLDivElement>) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) onCommit(total(packs, loose)); };
+  const enter = (e: React.KeyboardEvent) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); };
+  return (
+    <div className="row" style={{ gap: 4, flexWrap: 'nowrap' }} onBlur={commitOnLeave}>
+      <div style={{ width: 70 }}><NumberInput value={packs} allowEmpty aria-label={packName} placeholder="—" onKeyDown={enter} onChange={(v) => { const p = v === null ? null : Math.max(0, Math.floor(v)); setPacks(p); onChange(total(p, loose)); }} /></div>
+      <span className="xs">{packName}</span>
+      <div style={{ width: 70 }}><QtyInput value={loose} allowEmpty aria-label={unitName} placeholder="—" onKeyDown={enter} onChange={(v) => { setLoose(v); onChange(total(packs, v)); }} /></div>
+      <span className="xs">{unitName}</span>
     </div>
   );
 }

@@ -709,4 +709,13 @@ export const MIGRATIONS: string[] = [
   UPDATE batches SET purchase_item_id = (SELECT pi.id FROM purchase_items pi WHERE pi.batch_id = batches.id ORDER BY pi.id LIMIT 1) WHERE ref_type = 'purchase';
   CREATE INDEX idx_batches_supplier ON batches(supplier_id) WHERE supplier_id IS NOT NULL;
   `,
+  /* ---------------------------------------------------------------- v4: count products are never weighed */
+  `
+  -- a product counted in pieces/cans/bags (or dozens, cartons…) is sold by count: an old product form could leave the
+  -- "sold by weight" flag and a gram/ml sub-unit behind after switching the base unit away from kilo/litre
+  UPDATE products SET is_weighted = 0 WHERE is_weighted = 1 AND base_unit_id IN (SELECT id FROM units WHERE kind = 'count');
+  DELETE FROM product_units
+   WHERE unit_id IN (SELECT id FROM units WHERE kind <> 'count')
+     AND product_id IN (SELECT p.id FROM products p JOIN units u ON u.id = p.base_unit_id WHERE u.kind = 'count');
+  `,
 ];
