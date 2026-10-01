@@ -1,8 +1,8 @@
 import { AppError } from '../../shared/errors';
 import { toBaseQty } from '../../shared/qty';
 import { purchaseInput, purchaseOrderInput, purchaseReturnInput, type PurchaseInput, type PurchaseOrderInput, type PurchaseReturnInput } from '../../shared/schemas';
-import { type Ctx, audit, defaultLocationId, docNo, getSetting, requirePerm, today, ts, tx } from './context';
-import { issueStock, receiveStock } from './inventory';
+import { type Ctx, audit, defaultLocationId, docNo, requirePerm, today, ts, tx } from './context';
+import { issueFromBatch, issueStock, receiveStock, type BatchRow } from './inventory';
 import { postLedger } from './parties';
 import { allocate } from './pricing';
 import { logPrice } from './products';
@@ -65,13 +65,14 @@ export function createPurchase(ctx: Ctx, raw: PurchaseInput) {
       const baseCost = l.base > 0 ? (landed * 1000) / l.base : 0;
       const { batchId } = receiveStock(ctx, {
         productId: l.productId, locationId, qty: l.base, unitCost: baseCost, type: 'purchase', refType: 'purchase', refId: purchaseId,
-        batch: { batchNo: l.batchNo, expiryDate: l.expiryDate },
+        batch: { batchNo: l.batchNo, expiryDate: l.expiryDate, supplierId: input.supplierId ?? null },
       });
-      insItem.run({
+      const itemInfo = insItem.run({
         pid: purchaseId, prod: l.productId, unit: l.unitId, pname: l.u.variant_name ? `${l.u.product_name} ${l.u.variant_name}` : l.u.product_name,
         uname: l.u.unit_name, qty: l.qty, factor: l.u.factor, base: l.base, cost: l.unitCost, disc: l.discount, total: l.total, landed,
         batch: batchId, bno: l.batchNo ?? null, exp: l.expiryDate ?? null,
       });
+      if (batchId) ctx.db.prepare('UPDATE batches SET purchase_item_id = ? WHERE id = ?').run(Number(itemInfo.lastInsertRowid), batchId);
       const rounded = Math.round(baseCost * 10000) / 10000;
       if (Math.abs(rounded - l.u.last_cost) > 0.0001) logPrice(ctx, l.productId, 'cost', l.u.last_cost || null, rounded, { supplierId: input.supplierId, refType: 'purchase', refId: purchaseId });
       ctx.db.prepare('UPDATE products SET last_cost = ?, default_supplier_id = COALESCE(default_supplier_id, ?), updated_at = ? WHERE id = ?').run(rounded, input.supplierId ?? null, ts(ctx), l.productId);
@@ -132,17 +133,40 @@ export function listPurchases(ctx: Ctx, opts: { from: string; to: string; suppli
 }
 
 /** Return goods to a supplier. Stock leaves at average cost; supplier balance or cash is credited with the agreed price. */
+/**
+ * Supplier return. Batch-aware: a line may name the exact batch (or the purchase line whose batch it was);
+ * stock then leaves that batch only. Never returns more than the batch / purchase line holds and never
+ * makes stock negative. Stock, batch, movement ledger, supplier balance (or drawer) and audit change
+ * together in one transaction.
+ */
 export function createPurchaseReturn(ctx: Ctx, raw: PurchaseReturnInput) {
   requirePerm(ctx, 'purchases.manage');
   const input = purchaseReturnInput.parse(raw);
   return tx(ctx, () => {
     let supplierId = input.supplierId ?? null;
-    let locationId = input.locationId ?? defaultLocationId(ctx.db);
+    let locationId = input.locationId ?? null;
     if (input.purchaseId) {
       const p = ctx.db.prepare('SELECT supplier_id, location_id FROM purchases WHERE id = ?').get(input.purchaseId) as { supplier_id: number | null; location_id: number } | undefined;
       if (!p) throw new AppError('NOT_FOUND');
       supplierId = p.supplier_id;
       locationId = p.location_id;
+    }
+    // resolve the batch of every line up front (explicit batch, or the batch created by the purchase line)
+    const batchOf = (l: (typeof input.lines)[number]): BatchRow | null => {
+      let id = l.batchId ?? null;
+      if (!id && l.purchaseItemId) id = (ctx.db.prepare('SELECT batch_id FROM purchase_items WHERE id = ?').get(l.purchaseItemId) as { batch_id: number | null } | undefined)?.batch_id ?? null;
+      if (!id) return null;
+      const b = ctx.db.prepare('SELECT * FROM batches WHERE id = ?').get(id) as BatchRow | undefined;
+      if (!b || b.product_id !== l.productId) throw new AppError('BATCH_NOT_FOUND');
+      return b;
+    };
+    const batches = input.lines.map(batchOf);
+    const firstBatch = batches.find(Boolean);
+    if (!locationId) locationId = firstBatch?.location_id ?? defaultLocationId(ctx.db);
+    for (const b of batches) {
+      if (!b) continue;
+      if (b.supplier_id && !supplierId) supplierId = b.supplier_id;
+      if (b.supplier_id && supplierId && b.supplier_id !== supplierId) throw new AppError('BATCH_SUPPLIER_MISMATCH');
     }
     if (input.refundMethod === 'balance' && !supplierId) throw new AppError('VALIDATION', { detail: 'اختر المورد' });
     const no = docNo(ctx.db, 'purchase_return', 'PR-', 6);
@@ -152,9 +176,10 @@ export function createPurchaseReturn(ctx: Ctx, raw: PurchaseReturnInput) {
     const retId = Number(info.lastInsertRowid);
     let total = 0;
     const ins = ctx.db.prepare(
-      `INSERT INTO purchase_return_items(return_id, purchase_item_id, product_id, unit_id, qty, base_qty, unit_cost, total, cost_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO purchase_return_items(return_id, purchase_item_id, product_id, unit_id, qty, base_qty, unit_cost, total, cost_total, batch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
-    for (const l of input.lines) {
+    const auditLines: unknown[] = [];
+    input.lines.forEach((l, i) => {
       const u = unitInfo(ctx, l.productId, l.unitId);
       const base = toBaseQty(l.qty, u.factor);
       if (l.purchaseItemId) {
@@ -163,18 +188,26 @@ export function createPurchaseReturn(ctx: Ctx, raw: PurchaseReturnInput) {
         if (base > pi.base_qty - pi.returned_base_qty) throw new AppError('RETURN_QTY_EXCEEDED', { name: u.product_name });
         ctx.db.prepare('UPDATE purchase_items SET returned_base_qty = returned_base_qty + ? WHERE id = ?').run(base, l.purchaseItemId);
       }
-      const lineTotal = Math.round((l.unitCost * l.qty) / 1000);
-      const out = issueStock(ctx, { productId: l.productId, locationId, qty: base, type: 'purchase_return', refType: 'purchase_return', refId: retId, note: input.reason, allowNegative: getSetting(ctx.db, 'sales.allowNegativeStock') });
-      ins.run(retId, l.purchaseItemId ?? null, l.productId, l.unitId, l.qty, base, l.unitCost, lineTotal, out.costTotal);
+      const b = batches[i];
+      // a batch return without a stated price is credited at that batch's own purchase cost (users who
+      // cannot see costs can still return goods correctly)
+      const atBatchCost = !!b && !l.unitCost;
+      const unitCost = atBatchCost ? Math.round((b!.unit_cost * u.factor) / 1000) : l.unitCost;
+      const lineTotal = atBatchCost ? Math.round((b!.unit_cost * base) / 1000) : Math.round((unitCost * l.qty) / 1000);
+      const move = { productId: l.productId, locationId: locationId!, qty: base, type: 'purchase_return' as const, refType: 'purchase_return', refId: retId, note: input.reason };
+      // goods can only go back if we hold them: never below zero, whatever the negative-stock setting
+      const out = b ? issueFromBatch(ctx, { ...move, batchId: b.id }) : issueStock(ctx, { ...move, allowNegative: false });
+      ins.run(retId, l.purchaseItemId ?? null, l.productId, l.unitId, l.qty, base, unitCost, lineTotal, out.costTotal, b?.id ?? null);
+      auditLines.push({ productId: l.productId, qty: base, batchId: b?.id ?? null, expiry: b?.expiry_date ?? null, total: lineTotal });
       total += lineTotal;
-    }
+    });
     ctx.db.prepare('UPDATE purchase_returns SET total = ? WHERE id = ?').run(total, retId);
     if (input.refundMethod === 'balance') postLedger(ctx, 'supplier', supplierId!, 'return', -total, { type: 'purchase_return', id: retId }, `مرتجع شراء ${no}`);
     else {
       const s = shiftForCash(ctx);
       if (s) addCashMovement(ctx, s.id, 'deposit', total, { type: 'purchase_return', id: retId }, `مرتجع شراء ${no}`);
     }
-    audit(ctx, 'purchase.return', 'purchase_return', retId, undefined, { returnNo: no, total, supplierId });
+    audit(ctx, 'purchase.return', 'purchase_return', retId, undefined, { returnNo: no, total, supplierId, refund: input.refundMethod, lines: auditLines }, input.reason ?? null);
     return { id: retId, returnNo: no, total };
   });
 }

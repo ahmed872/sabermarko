@@ -117,6 +117,24 @@ const monthly: any[] = [];
   check('monthly roll-forward Opening + In - Out = Closing = night snapshot', sim.months.length, bad);
 }
 
+// batches: expiry, lineage and batch-aware supplier returns
+{
+  const expiredSold = all(`SELECT si.id, b.expiry_date, s.business_date FROM sale_item_batches sib JOIN batches b ON b.id = sib.batch_id
+      JOIN sale_items si ON si.id = sib.sale_item_id JOIN sales s ON s.id = si.sale_id WHERE b.expiry_date IS NOT NULL AND b.expiry_date < s.business_date`);
+  check('no sale ever took goods from an expired batch', one<{ n: number }>('SELECT COUNT(*) AS n FROM sale_item_batches').n, expiredSold);
+  const overReturned = all(`SELECT b.id, b.initial_qty, (SELECT SUM(ri.base_qty) FROM purchase_return_items ri WHERE ri.batch_id = b.id) AS returned
+      FROM batches b WHERE (SELECT COALESCE(SUM(ri.base_qty),0) FROM purchase_return_items ri WHERE ri.batch_id = b.id) > b.initial_qty OR b.qty > b.initial_qty OR b.qty < 0`);
+  check('supplier returns never exceed their batch; batch qty within 0..received', one<{ n: number }>('SELECT COUNT(*) AS n FROM batches').n, overReturned);
+  const retMoves = all(`SELECT ri.return_id, ri.product_id, SUM(ri.base_qty) AS back,
+      COALESCE((SELECT -SUM(m.qty) FROM stock_movements m WHERE m.ref_type = 'purchase_return' AND m.ref_id = ri.return_id AND m.product_id = ri.product_id), 0) AS moved
+    FROM purchase_return_items ri GROUP BY ri.return_id, ri.product_id HAVING back <> moved`);
+  check('every supplier return has its stock movement', one<{ n: number }>('SELECT COUNT(*) AS n FROM purchase_return_items').n, retMoves);
+  const lineage = all(`SELECT b.id FROM batches b JOIN purchases p ON b.ref_type = 'purchase' AND p.id = b.ref_id
+      WHERE COALESCE(b.supplier_id, -1) <> COALESCE(p.supplier_id, -1) OR b.purchase_item_id IS NULL
+         OR NOT EXISTS (SELECT 1 FROM purchase_items pi WHERE pi.id = b.purchase_item_id AND pi.batch_id = b.id AND pi.expiry_date IS b.expiry_date)`);
+  check('every purchased batch carries its supplier, purchase line and expiry', one<{ n: number }>(`SELECT COUNT(*) AS n FROM batches WHERE ref_type = 'purchase'`).n, lineage);
+}
+
 /* ================================================================== C. money */
 {
   const bad: unknown[] = []; let n = 0;

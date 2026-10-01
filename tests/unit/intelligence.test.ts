@@ -250,7 +250,8 @@ describe('promotion engine safety and profitability', () => {
     const y = createProduct(env.ctx, { name: 'لبن', baseUnitId: piece, sellPrice: egp(10), trackExpiry: true }).id;
     const others = [1, 2, 3].map((i) => addProduct(env, { name: `صنف ${i}`, price: 5, cost: 3, qty: 500 }));
     createPurchase(env.ctx, { lines: [{ productId: y, unitId: piece, qty: 30_000, unitCost: egp(6), expiryDate: '2026-09-10' }], paid: egp(180) });
-    simulateDays(env, 12, (d) => [[[y, 1], [others[d % 3], 2]]]); // now 13 Sep: ~18 units expired 3 days ago
+    // sold daily until its expiry date (10 Sep) — never after: expired goods cannot be sold any more
+    simulateDays(env, 12, (d) => [d <= 8 ? [[y, 1], [others[d % 3], 2]] : [[others[d % 3], 2]]]); // now 13 Sep: 21 units expired 3 days ago
     const yy = productMetrics(env.ctx).find((x) => x.id === y)!;
     expect(yy.expiry!.expiredQty).toBeGreaterThan(0);
     expect(yy.expiry!.atRiskQty).toBe(0);
@@ -364,5 +365,75 @@ describe('suggest -> approve -> execute -> measure', () => {
     expect(pair.lift).toBeGreaterThan(1.5);
     setSettingRaw(env.ctx.db, 'intel.basketMinInvoices', 100000);
     expect(basketPairs(env.ctx).sufficient).toBe(false);
+  });
+});
+
+describe('smart promotions respect expiry (batch spec K, L, M)', () => {
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  /** put a product's whole stock into one batch expiring `days` from now (negative = already expired) */
+  function batchAll(env: TestEnv, productId: number, days: number) {
+    const db = env.ctx.db;
+    db.prepare('UPDATE products SET track_expiry = 1 WHERE id = ?').run(productId);
+    const st = db.prepare('SELECT location_id, qty FROM product_stock WHERE product_id = ?').get(productId) as { location_id: number; qty: number };
+    const cost = (db.prepare('SELECT avg_cost FROM products WHERE id = ?').get(productId) as { avg_cost: number }).avg_cost;
+    db.prepare(`INSERT INTO batches(product_id, location_id, expiry_date, qty, initial_qty, unit_cost, received_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(productId, st.location_id, iso(new Date(env.clock.t.getTime() + days * DAY)), st.qty, st.qty, cost, '2026-08-01 09:00:00');
+  }
+
+  it('K: expired stock is never the target of an offer nor handed out as a gift', () => {
+    const { env, A, B } = scenarioStore();
+    setSettingRaw(env.ctx.db, 'features.expiry', true);
+    expect(buildSuggestions(env.ctx).find((x) => x.productId === A)!.partnerId).toBe(B); // B is the natural gift
+    batchAll(env, B, -2); // all of B expired two days ago
+    const m = new Map(productMetrics(env.ctx).map((x) => [x.id, x]));
+    expect(m.get(B)!.sellableStock).toBe(0);
+    const built = buildSuggestions(env.ctx);
+    expect(built.some((x) => x.partnerId === B || x.payload.proposal.rewardProductId === B)).toBe(false);
+    // even a hand-made offer with B as the gift is flagged: there is nothing sellable to give
+    const sim = simulate(env.ctx, { type: 'cross', productId: A, rewardProductId: B, minQty: 2000, rewardQty: 1000, rewardType: 'free', value: 0, days: 14, name: '' }, m);
+    expect(sim.flags.rewardShort).toBe(true);
+    // and if A itself only has expired stock left, nothing is offered on A at all
+    batchAll(env, A, -1);
+    expect(buildSuggestions(env.ctx).some((x) => x.productId === A)).toBe(false);
+  });
+
+  it('L: an offer never runs past the expiry of the goods — in the proposal and, server-side, at approval', () => {
+    const { env, A } = scenarioStore();
+    setSettingRaw(env.ctx.db, 'features.expiry', true);
+    batchAll(env, A, 12); // A expires in 12 days, slow seller -> expiry offer
+    const s = buildSuggestions(env.ctx).find((x) => x.productId === A)!;
+    expect(s.kind).toBe('expiry');
+    expect(s.payload.proposal.days).toBeLessThanOrEqual(12);
+    // an owner editing the end date past the expiry is refused by the engine, not just the screen
+    generateSuggestions(env.ctx);
+    const row = env.ctx.db.prepare(`SELECT id FROM promotion_suggestions WHERE product_id = ? AND status = 'new'`).get(A) as { id: number };
+    const tooLate = iso(new Date(env.clock.t.getTime() + 20 * DAY));
+    expect(() => approveSuggestion(env.ctx, { id: row.id, endDate: tooLate })).toThrow('PROMO_PAST_EXPIRY');
+    expect(() => approveSuggestion(env.ctx, { id: row.id })).not.toThrow();
+  });
+
+  it('L2: a sales offer (pair) approved after the stock turned short-dated is refused past the expiry', () => {
+    const { env, A } = scenarioStore();
+    setSettingRaw(env.ctx.db, 'features.expiry', true);
+    generateSuggestions(env.ctx);
+    const row = env.ctx.db.prepare(`SELECT id, kind FROM promotion_suggestions WHERE product_id = ? AND status = 'new'`).get(A) as { id: number; kind: string };
+    expect(row.kind).toBe('pair'); // 21-day offer
+    batchAll(env, A, 10);
+    expect(() => approveSuggestion(env.ctx, { id: row.id })).toThrow('PROMO_PAST_EXPIRY');
+  });
+
+  it('M: many expiry offers do not hide slow / dead stock from the owner', () => {
+    const { env, A } = scenarioStore();
+    setSettingRaw(env.ctx.db, 'features.expiry', true);
+    const piece = env.unit('قطعة');
+    for (let i = 0; i < 6; i++) {
+      const id = createProduct(env.ctx, { name: `ألبان ${i}`, baseUnitId: piece, sellPrice: egp(14), trackExpiry: true }).id;
+      createPurchase(env.ctx, { lines: [{ productId: id, unitId: piece, qty: 200_000, unitCost: egp(10), expiryDate: iso(new Date(env.clock.t.getTime() + (8 + i) * DAY)) }], paid: egp(2000) });
+    }
+    generateSuggestions(env.ctx);
+    const shown = (listSuggestions(env.ctx) as any).items.filter((x: any) => x.status === 'new');
+    expect(shown.filter((x: any) => x.kind === 'expiry').length).toBeGreaterThan(0);
+    expect(shown.filter((x: any) => x.kind === 'expiry').length).toBeLessThanOrEqual(3);
+    expect(shown.some((x: any) => x.product_id === A && x.kind !== 'expiry')).toBe(true);
   });
 });

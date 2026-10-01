@@ -21,7 +21,7 @@ export function Layout() {
   const alerts = useQuery({ queryKey: ['alerts'], queryFn: () => api<any[]>('reports.alerts'), refetchInterval: 120_000, enabled: !!user });
   const shift = useQuery({ queryKey: ['shift'], queryFn: () => api('shifts.current'), enabled: can('pos.sell'), refetchInterval: 60_000 });
   const lowCount = alerts.data?.find((a) => a.key === 'low')?.count;
-  const expCount = (alerts.data?.find((a) => a.key === 'expiring')?.count ?? 0) + (alerts.data?.find((a) => a.key === 'expired')?.count ?? 0);
+  const expCount = ['expiring', 'expiring_near', 'expired'].reduce((n, k) => n + (alerts.data?.find((a) => a.key === k)?.count ?? 0), 0);
   const groups: { title: string; items: NavItem[] }[] = [
     { title: '', items: [{ to: '/', label: 'الرئيسية', icon: <Home size={18} /> }, { to: '/insights', label: 'اقتراحات البيع', icon: <Sparkles size={18} />, perm: 'reports.view' }] },
     { title: 'المبيعات', items: [

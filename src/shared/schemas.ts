@@ -137,7 +137,7 @@ export const purchaseReturnInput = z.object({
   supplierId: optId,
   locationId: optId,
   lines: z
-    .array(z.object({ purchaseItemId: optId, productId: id, unitId: id, qty: posMilli, unitCost: money }))
+    .array(z.object({ purchaseItemId: optId, batchId: optId, productId: id, unitId: id, qty: posMilli, unitCost: money.default(0) }))
     .min(1),
   refundMethod: z.enum(['balance', 'cash']),
   reason: optText,

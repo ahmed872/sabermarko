@@ -59,7 +59,7 @@ export default function Settings() {
               <Segmented value={s.mode} onChange={(v) => set('mode', v)} options={[{ value: 'simple', label: 'بسيط' }, { value: 'advanced', label: 'متقدم' }]} />
             </SettingRow>
             {sw('features.creditSales', 'البيع الآجل', 'تسجيل مديونيات على العملاء (يحتاج صلاحية للكاشير)')}
-            {sw('features.expiry', 'تواريخ الصلاحية والدفعات', 'طلب تاريخ الصلاحية عند الشراء، والبيع بالأقرب انتهاءً، وتنبيهات قبل الانتهاء')}
+            {sw('features.expiry', 'تواريخ الصلاحية والدفعات', 'طلب تاريخ الصلاحية عند الشراء، والبيع بالأقرب انتهاءً، ومنع بيع المنتهي، وتنبيهات قبل الانتهاء')}
             {sw('features.purchaseOrders', 'طلبات الشراء', 'طلب البضاعة من المورد قبل الاستلام')}
             {sw('features.promotions', 'العروض', 'خصومات وعروض (2 بـ…، اشترِ 3 والرابع مجانًا)')}
             {sw('features.priceLists', 'أسعار الجملة وقوائم الأسعار', 'سعر جملة/خاص لعملاء محددين')}
@@ -93,7 +93,9 @@ export default function Settings() {
         )}
         {tab === 'inventory' && (
           <div className="col">
-            <SettingRow title="تنبيه الصلاحية قبل (يوم)"><div style={{ width: 120 }}><NumberInput value={s['inventory.expiryAlertDays']} onChange={(v) => set('inventory.expiryAlertDays', v ?? 30)} /></div></SettingRow>
+            <SettingRow title="صلاحية قريبة جدًا (يوم)" desc="تنبيه عاجل"><div style={{ width: 120 }}><NumberInput value={s['inventory.expiryCriticalDays']} onChange={(v) => set('inventory.expiryCriticalDays', v ?? 7)} /></div></SettingRow>
+            <SettingRow title="تنبيه الصلاحية قبل (يوم)" desc="صلاحية قريبة"><div style={{ width: 120 }}><NumberInput value={s['inventory.expiryAlertDays']} onChange={(v) => set('inventory.expiryAlertDays', v ?? 30)} /></div></SettingRow>
+            <SettingRow title="متابعة الصلاحية حتى (يوم)" desc="للعرض في شاشة الصلاحية فقط"><div style={{ width: 120 }}><NumberInput value={s['inventory.expiryWatchDays']} onChange={(v) => set('inventory.expiryWatchDays', v ?? 90)} /></div></SettingRow>
             <SettingRow title="اعتبار المنتج راكدًا إذا لم يُبع منذ (يوم)"><div style={{ width: 120 }}><NumberInput value={s['inventory.deadStockDays']} onChange={(v) => set('inventory.deadStockDays', v ?? 30)} /></div></SettingRow>
             <SettingRow title="اقتراحات الطلب تغطي (يوم)" desc="الكمية المقترحة تكفي البيع لهذه المدة بعد وصول البضاعة"><div style={{ width: 120 }}><NumberInput value={s['inventory.reorderCoverDays']} onChange={(v) => set('inventory.reorderCoverDays', v ?? 7)} /></div></SettingRow>
             <div className="section-title mt">اقتراحات البيع والعروض الذكية</div>

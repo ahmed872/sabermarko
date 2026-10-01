@@ -156,25 +156,98 @@ function DocsTab() {
   );
 }
 
+const TIER: Record<string, { label: string; tone: string }> = {
+  expired: { label: 'منتهي', tone: 'danger' }, critical: { label: 'قريب جدًا', tone: 'danger' }, near: { label: 'قريب', tone: 'warning' }, watch: { label: 'متابعة', tone: 'info' },
+};
+const ACTION: Record<string, string> = { dispose: 'إعدام (لا يُباع)', return: 'مراجعة إرجاع للمورد', promote: 'عرض تصريف آمن', monitor: 'متابعة فقط' };
+
+/** Expiry dashboard: tiers → batch details → owner decides (return to supplier / dispose). Nothing is automatic. */
 function ExpiryTab() {
-  const [days, setDays] = useState(30);
-  const e = useQuery({ queryKey: ['expiring', days], queryFn: () => api<any[]>('reports.expiring', { days }) });
+  const [tier, setTier] = useState<string>('all');
+  const [ret, setRet] = useState<any | null>(null);
+  const e = useQuery({ queryKey: ['expiry-overview'], queryFn: () => api<any>('inventory.expiry') });
   const { can } = useApp();
+  const { run } = useAction();
+  const qc = useQueryClient();
+  if (!e.data) return <Loading />;
+  const t = e.data.thresholds;
+  const hint: Record<string, string> = { expired: 'لا تُباع', critical: `خلال ${t.critical} أيام`, near: `خلال ${t.near} يومًا`, watch: `خلال ${t.watch} يومًا` };
+  const rows = (e.data.items as any[]).filter((i) => tier === 'all' || i.tier === tier);
+  const dispose = (b: any) => run(async () => {
+    if (!window.confirm(`تسجيل ${qty(b.qty)} ${b.unit_symbol} من ${b.name} كتالف (منتهي الصلاحية)؟`)) return;
+    await api('inventory.adjust', { type: 'damage', locationId: b.location_id, reason: 'منتهي الصلاحية — إعدام', lines: [{ productId: b.product_id, qty: b.qty }] });
+    await qc.invalidateQueries();
+  }, 'تم تسجيل الكمية كتالف');
   return (
-    <div className="card">
-      <div className="row" style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
-        <span>تنتهي خلال</span>
-        <Segmented value={String(days)} onChange={(v) => setDays(Number(v))} options={[{ value: '7', label: '7 أيام' }, { value: '30', label: '30 يوم' }, { value: '60', label: '60 يوم' }, { value: '90', label: '90 يوم' }]} />
+    <div className="col">
+      <div className="grid grid-4">
+        {(e.data.summary as any[]).map((s) => (
+          <button key={s.tier} type="button" className={`card stat clickable ${tier === s.tier ? 'primary' : ''}`} style={{ textAlign: 'start' }} onClick={() => setTier(tier === s.tier ? 'all' : s.tier)}>
+            <div className="label"><span className={`badge ${TIER[s.tier].tone}`}>{TIER[s.tier].label}</span> {hint[s.tier]}</div>
+            <div className="value">{num(s.products)} منتج</div>
+            <div className="hint">{num(s.batches)} دفعة{s.value !== null ? ` • ${money(s.value)}` : ''}</div>
+          </button>
+        ))}
       </div>
-      {!e.data?.length ? <Empty title="لا توجد منتجات قريبة من الانتهاء" /> : (
-        <table className="table"><thead><tr><th>المنتج</th><th>الدفعة</th><th>تاريخ الانتهاء</th><th className="n">المتبقي</th><th className="n">الكمية</th>{can('reports.cost') && <th className="n">القيمة</th>}<th>المكان</th></tr></thead>
-          <tbody>{e.data.map((b) => (
-            <tr key={b.id}><td className="bold"><Link to={`/products/${b.product_id}`}>{b.name}{b.variant_name ? ` ${b.variant_name}` : ''}</Link></td><td>{b.batch_no ?? '—'}</td><td className="num">{dateOnly(b.expiry_date)}</td>
-              <td className="n">{b.days_left < 0 ? <span className="badge danger">منتهي منذ {-b.days_left} يوم</span> : <span className={`badge ${b.days_left <= 7 ? 'danger' : 'warning'}`}>{b.days_left} يوم</span>}</td>
-              <td className="n bold">{qty(b.qty)} {b.unit_symbol}</td>{can('reports.cost') && <td className="n">{money(Math.round((b.qty * b.unit_cost) / 1000))}</td>}<td>{b.location_name}</td></tr>
-          ))}</tbody></table>
-      )}
+      <div className="card">
+        {!rows.length ? <Empty title="لا توجد دفعات في هذه الحالة" /> : (
+          <table className="table"><thead><tr><th>المنتج</th><th>الدفعة</th><th>المورد</th><th>الصلاحية</th><th className="n">المتبقي</th><th className="n">الكمية</th>
+            {can('reports.cost') && <th className="n">تكلفة/قيمة</th>}<th className="n">البيع يوميًا</th><th>المقترح</th><th /></tr></thead>
+            <tbody>{rows.map((b) => (
+              <tr key={b.batch_id}>
+                <td className="bold"><Link to={`/products/${b.product_id}`}>{b.name}{b.variant_name ? ` ${b.variant_name}` : ''}</Link><div className="xs muted">{b.location_name}</div></td>
+                <td className="small">#{b.batch_id}{b.batch_no ? ` • ${b.batch_no}` : ''}<div className="xs muted num">استلام {dateOnly(b.received_at)}{b.purchase_no ? <> • <span dir="ltr">{b.purchase_no}</span></> : null}</div></td>
+                <td className="small">{b.supplier_name ?? '—'}</td>
+                <td className="num">{dateOnly(b.expiry_date)}</td>
+                <td className="n"><span className={`badge ${TIER[b.tier].tone}`}>{b.days_left < 0 ? `منتهي منذ ${-b.days_left} يوم` : `${b.days_left} يوم`}</span></td>
+                <td className="n bold">{qty(b.qty)} {b.unit_symbol}</td>
+                {can('reports.cost') && <td className="n small">{money(Math.round(b.unit_cost))}<div className="bold">{money(b.value)}</div></td>}
+                <td className="n small">{qty(b.perDay)}</td>
+                <td className="small">{ACTION[b.action]}{b.unsold > 0 && b.tier !== 'expired' ? <div className="xs muted">لن يُباع منها تقريبًا {qty(b.unsold)}</div> : null}</td>
+                <td className="row" style={{ gap: 4 }}>
+                  {can('purchases.manage') && <button className="btn sm" onClick={() => setRet(b)}>إرجاع للمورد</button>}
+                  {b.tier === 'expired' && can('inventory.adjust') && <button className="btn sm danger outline" onClick={() => dispose(b)}>إعدام</button>}
+                </td>
+              </tr>
+            ))}</tbody></table>
+        )}
+      </div>
+      {ret && <SupplierReturnDialog batch={ret} onClose={() => { setRet(null); void qc.invalidateQueries(); }} />}
     </div>
+  );
+}
+
+const RETURN_REASONS = ['قرب انتهاء الصلاحية', 'منتهي الصلاحية', 'تالف من المصدر', 'خطأ في التوريد', 'أخرى'];
+
+/** Return a quantity of ONE batch to its supplier (purchase return tied to the batch). */
+export function SupplierReturnDialog({ batch: b, onClose }: { batch: any; onClose: () => void }) {
+  const { run, busy } = useAction();
+  const suppliers = useQuery({ queryKey: ['suppliers-pick'], queryFn: () => api<any[]>('suppliers.list', { limit: 500 }) });
+  const [supplierId, setSupplierId] = useState<number | ''>(b.supplier_id ?? '');
+  const [q, setQ] = useState<number | null>(b.qty);
+  const [reason, setReason] = useState(b.days_left < 0 ? 'منتهي الصلاحية' : 'قرب انتهاء الصلاحية');
+  const [method, setMethod] = useState<'balance' | 'cash'>('balance');
+  const unitCost = Math.round(b.unit_cost ?? 0);
+  const over = q !== null && q > b.qty;
+  return (
+    <Modal title={`إرجاع للمورد — ${b.name}`} onClose={onClose} footer={<button className="btn primary" disabled={busy || !q || over || !supplierId} onClick={() => run(async () => {
+      await api('purchases.return', { supplierId, locationId: b.location_id, refundMethod: method, reason, lines: [{ batchId: b.batch_id, productId: b.product_id, unitId: b.base_unit_id, qty: q, unitCost }] });
+      onClose();
+    }, 'تم تسجيل المرتجع للمورد')}>تسجيل المرتجع</button>}>
+      <div className="col">
+        <div className="alert info small">الدفعة #{b.batch_id}{b.batch_no ? ` (${b.batch_no})` : ''} — صلاحية {dateOnly(b.expiry_date)} — المتاح في الدفعة {qty(b.qty)} {b.unit_symbol}. سيُخصم من هذه الدفعة فقط.</div>
+        <Field label="المورد">
+          <select className="select" value={supplierId} disabled={!!b.supplier_id} onChange={(e) => setSupplierId(Number(e.target.value) || '')}>
+            <option value="">اختر المورد</option>
+            {(suppliers.data ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </Field>
+        <Field label={`الكمية (${b.unit_symbol})`} error={over ? 'أكبر من كمية الدفعة' : undefined}><QtyInput value={q} onChange={setQ} /></Field>
+        <Field label="سبب المرتجع"><select className="select" value={reason} onChange={(e) => setReason(e.target.value)}>{RETURN_REASONS.map((r) => <option key={r}>{r}</option>)}</select></Field>
+        <Field label="طريقة التسوية"><Segmented value={method} onChange={setMethod} options={[{ value: 'balance', label: 'خصم من حساب المورد' }, { value: 'cash', label: 'استرداد نقدي' }]} /></Field>
+        {q !== null && !over && <div className="small muted">قيمة المرتجع بسعر الشراء: {money(Math.round((unitCost * q) / 1000))}</div>}
+      </div>
+    </Modal>
   );
 }
 

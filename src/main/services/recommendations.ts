@@ -82,7 +82,7 @@ export function simulate(ctx: Ctx, p: Proposal, metrics?: Map<number, ProductMet
   const maxDisc = getSetting(db, 'intel.maxDiscountPct');
   const mA = metrics?.get(a.id);
   const mB = b ? metrics?.get(b.id) : undefined;
-  const target = Math.max(0, Math.round(targetQty ?? (mA ? Math.max(0, mA.stock - mA.velocity * 30) : 0)));
+  const target = Math.max(0, Math.round(targetQty ?? (mA ? Math.max(0, mA.sellableStock - mA.velocity * 30) : 0)));
   const deals = p.minQty > 0 ? Math.ceil(target / p.minQty) : 0;
   const rewardUsed = b ? deals * (p.rewardQty ?? 0) : 0;
   const flags = {
@@ -90,8 +90,9 @@ export function simulate(ctx: Ctx, p: Proposal, metrics?: Map<number, ProductMet
     lowMargin: marginAfterPct !== null && marginAfterPct < minMargin,
     overDiscount: effectiveDiscountPct > maxDisc,
     belowCost: p.type === 'percent' && a.avg_cost > 0 && Math.round(a.sell_price * (1 - p.value / 10000)) < a.avg_cost,
-    giftHeavy: !!(b && mB && mB.stock > 0 && rewardUsed > mB.stock * 0.3),
-    rewardShort: !!(b && mB && mB.stock - mB.velocity * p.days < rewardUsed),
+    giftHeavy: !!(b && mB && mB.sellableStock > 0 && rewardUsed > mB.sellableStock * 0.3),
+    // expired goods can never be handed out as a gift: only sellable stock counts
+    rewardShort: !!(b && mB && mB.sellableStock - mB.velocity * p.days < rewardUsed),
   };
   const c = cur(ctx);
   const m = (v: number) => formatMoney(v, c);
@@ -120,7 +121,7 @@ function titleOf(p: Proposal, aName: string, bName?: string, money?: (v: number)
 
 interface Built {
   kind: SuggestionKind; productId: number; partnerId: number | null; score: number; verdict: 'good' | 'ok' | 'review';
-  payload: { title: string; proposal: Proposal; simulation: Simulation; reasons: string[]; goal: string; verdictText: string; rejected: { title: string; why: string }[]; history?: string | null };
+  payload: { title: string; proposal: Proposal; simulation: Simulation; reasons: string[]; goal: string; verdictText: string; rejected: { title: string; why: string }[]; history?: string | null; supplierReturn?: { id: number; name: string } | null };
 }
 
 /* ------------------------------------------------------------------ feedback loop (rules, not ML) */
@@ -174,7 +175,11 @@ export function buildSuggestions(ctx: Ctx): Built[] {
   const unitStep = (m: ProductMetrics) => (m.allowDecimal ? 1000 : 1000);
 
   // fast movers that can serve as a reward
-  const hot = metricsList.filter((m) => m.classes.includes('hot') && !m.allowDecimal && m.stock > 0 && m.avgCost > 0 && (m.marginPct ?? 0) > 0);
+  const hot = metricsList.filter((m) => m.classes.includes('hot') && !m.allowDecimal && m.sellableStock > 0 && m.avgCost > 0 && (m.marginPct ?? 0) > 0
+    && !(m.expiry && m.expiry.expiredQty > 0 && m.sellableStock < m.velocity * 7));
+  /** offers must end by the last day the goods can legally be sold (latest valid batch expiry) */
+  const daysUntil = (d: string) => Math.round((Date.parse(`${d}T00:00:00`) - Date.parse(`${today(ctx)}T00:00:00`)) / 86_400_000);
+  const maxOfferDays = (...ms: (ProductMetrics | undefined)[]) => Math.min(...ms.map((m) => (m?.sellUntil ? daysUntil(m.sellUntil) + 1 : 365)));
 
   for (const a of metricsList) {
     if (a.avgCost <= 0 || a.price <= 0 || a.stock <= 0) continue; // no cost -> cannot judge profitability honestly
@@ -204,20 +209,27 @@ export function buildSuggestions(ctx: Ctx): Built[] {
       const reasons = [...a.reasons, `قيمة الكمية المعرضة للتلف بالتكلفة: ${money(lossIfExpired)}.`];
       if (sim.flags.belowCost || sim.flags.loss) reasons.push(`البيع بالخصم أقل من التكلفة، لكن الخسارة المتوقعة (${money(Math.max(0, -sim.projectedProfit))}) أقل من خسارة التلف الكامل (${money(lossIfExpired)}).`);
       else if (pick && proposal.value / 100 < maxPct) reasons.push(`تم اختيار خصم ${proposal.value / 100}% لأنه أكبر خصم يظل فوق التكلفة.`);
+      // the batch's supplier may take it back — suggested as an alternative, never done automatically
+      const sup = db.prepare(
+        `SELECT s.id, s.name FROM batches b LEFT JOIN purchases pu ON b.ref_type = 'purchase' AND pu.id = b.ref_id JOIN suppliers s ON s.id = COALESCE(b.supplier_id, pu.supplier_id)
+         WHERE b.product_id = ? AND b.qty > 0 AND b.expiry_date = ? LIMIT 1`,
+      ).get(a.id, e.nearestDate) as { id: number; name: string } | undefined;
+      if (sup) reasons.push(`بديل: راجع إرجاع الكمية للمورد «${sup.name}» من شاشة الصلاحية بدل الخصم، إذا كان يقبل المرتجع.`);
       built.push({
         kind: 'expiry', productId: a.id, partnerId: null, verdict: sim.unsafe ? 'review' : 'good',
         // loss-making offers rank below safe ones; urgency and value at risk order the rest
         score: 60 + 30 * (1 - Math.min(Math.max(e.daysLeft, 0), 60) / 60) + 10 * (lossIfExpired / maxStockValue) - (sim.unsafe ? REVIEW_PENALTY : 0),
-        payload: { title: titleOf(proposal, a.name), proposal, simulation: sim, reasons, goal: `بيع ${q(e.atRiskQty)} ${a.unitSymbol} قبل ${arDate(e.nearestDate)} بدل خسارتها.`, verdictText: sim.unsafe ? VERDICT_TEXT.review : VERDICT_TEXT.good, rejected: [], history: historyLine('expiry') },
+        payload: { title: titleOf(proposal, a.name), proposal, simulation: sim, reasons, goal: `بيع ${q(e.atRiskQty)} ${a.unitSymbol} قبل ${arDate(e.nearestDate)} بدل خسارتها.`, verdictText: sim.unsafe ? VERDICT_TEXT.review : VERDICT_TEXT.good, rejected: [], history: historyLine('expiry'), supplierReturn: sup ?? null },
       });
       continue;
     }
 
     if (cooldown.has(a.id)) continue;
+    if (a.sellableStock <= 0) continue; // only expired stock left: that is for disposal / supplier return, not an offer
 
     /* ---------------- slow / dead / excess: clear stock, protect margin */
     if (isClear && (a.marginPct ?? 0) > 0) {
-      const rawTarget = a.classes.includes('dead') ? a.stock : Math.max(0, a.stock - a.velocity * 30);
+      const rawTarget = a.classes.includes('dead') ? a.sellableStock : Math.max(0, a.sellableStock - a.velocity * 30);
       const target = a.allowDecimal ? Math.round(rawTarget) : Math.floor(rawTarget / 1000) * 1000;
       if (target < unitStep(a)) continue;
       // best partner among fast movers: bought-together > same category > sensible gift price
@@ -227,9 +239,10 @@ export function buildSuggestions(ctx: Ctx): Built[] {
         const s = (as ? 40 * Math.min(as.lift, 3) : 0) + (b.categoryId && b.categoryId === a.categoryId ? 15 : 0) + (giftShare <= 0.6 ? 20 - Math.abs(0.35 - giftShare) * 30 : -50) + Math.min(b.velocity / 1000, 20);
         return { b, s, as };
       }).filter((x) => x.s > -20).sort((x, y) => y.s - x.s);
-      const partner = partners[0];
+      const partner = partners.find((x) => maxOfferDays(a, x.b) >= 7);
       const options: Proposal[] = [];
-      const days = 21;
+      const days = Math.min(21, maxOfferDays(a, partner?.b));
+      if (days < 3) continue; // too close to expiry for a sales offer — the expiry suggestion covers it
       if (partner && !a.allowDecimal) {
         const B = partner.b;
         for (const n of [2, 3]) options.push({ type: 'cross', productId: a.id, rewardProductId: B.id, minQty: n * 1000, rewardQty: 1000, rewardType: 'free', value: 0, maxPerInvoice: 2, days, name: '' });
@@ -282,10 +295,13 @@ export function buildSuggestions(ctx: Ctx): Built[] {
       if (!A || !B || A.allowDecimal || B.allowDecimal || A.avgCost <= 0 || B.avgCost <= 0) continue;
       if (pr.lift < 1.5 || Math.max(pr.confAB, pr.confBA) < 0.2) continue;
       if (built.some((x) => x.productId === A.id || x.productId === B.id)) continue;
+      if (A.sellableStock <= 0 || B.sellableStock <= 0) continue;
+      const bundleDays = Math.min(30, maxOfferDays(A, B));
+      if (bundleDays < 7) continue;
       let pick: { p: Proposal; sim: Simulation } | null = null;
       for (const d of [10, 7, 5]) {
         const price = Math.floor(((A.price + B.price) * (1 - d / 100)) / 50) * 50; // round down to half a pound
-        const p: Proposal = { type: 'combo', productId: A.id, rewardProductId: B.id, minQty: 1000, rewardQty: 1000, value: price, days: 30, name: '' };
+        const p: Proposal = { type: 'combo', productId: A.id, rewardProductId: B.id, minQty: 1000, rewardQty: 1000, value: price, days: bundleDays, name: '' };
         const sim = simulate(ctx, p, metrics, A.velocity * 30);
         if (!sim.unsafe) { pick = { p, sim }; break; }
       }
@@ -410,6 +426,10 @@ export function approveSuggestion(ctx: Ctx, input: { id: number; proposal?: Part
     if (sim.unsafe && s.kind === 'expiry' && (sim.flags.loss || sim.flags.belowCost)) approvedBy = requirePermOrApproval(ctx, 'promotions.override');
     const start = input.startDate || today(ctx);
     const end = input.endDate || addDays(start, p.days - 1);
+    for (const pid of [p.productId, p.rewardProductId]) {
+      const until = pid ? metrics.get(pid)?.sellUntil : null;
+      if (until && end > until) throw new AppError('PROMO_PAST_EXPIRY', { date: until });
+    }
     const name = (input.name || p.name || payload.title).slice(0, 200);
     const baseline = { at: today(ctx), a: snapshot(metrics.get(p.productId)), b: p.rewardProductId ? snapshot(metrics.get(p.rewardProductId)) : null, simulation: sim };
     const info = ctx.db.prepare(

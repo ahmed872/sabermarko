@@ -673,6 +673,22 @@ function userLimitCheck() {
         } catch (e) { fail('purchaseReturn', e); }
       }
     }
+    // weekly expiry review (Mondays): the owner sends near-expiry batches back to their supplier (batch-aware return)
+    if (dow === 1) {
+      const near = db.prepare(
+        `SELECT b.id, b.product_id, b.location_id, b.qty, b.supplier_id FROM batches b
+         WHERE b.qty >= 2000 AND b.supplier_id IS NOT NULL AND b.expiry_date >= ? AND b.expiry_date <= ? ORDER BY b.expiry_date LIMIT 4`,
+      ).all(dateStr, iso(at(day + 5, 0))) as { id: number; product_id: number; location_id: number; qty: number; supplier_id: number }[];
+      for (const b of near) {
+        const l = live.get(b.product_id); if (!l || l.sp.weighted) continue;
+        const q = Math.floor(b.qty / 2000) * 1000; // half the batch, whole pieces
+        if (q <= 0 || stockOf(b.product_id, b.location_id) < q) continue;
+        try {
+          const pr: any = createPurchaseReturn(manager, { supplierId: b.supplier_id, refundMethod: 'balance', reason: 'قرب انتهاء الصلاحية', lines: [{ batchId: b.id, productId: b.product_id, unitId: l.unit, qty: q }] });
+          addStock(b.product_id, b.location_id, -q); addSupp(b.supplier_id, -pr.total); inc('purchaseReturns.expiryBatch');
+        } catch (e) { fail('expiryReturn', e); }
+      }
+    }
     // close registers
     clock.t = at(day, 23, 30); shiftClose(eCtx);
     if (busy) { clock.t = at(day, 23, 31); shiftClose(manager); }

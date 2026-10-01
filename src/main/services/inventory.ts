@@ -93,7 +93,11 @@ export function updateAverageCost(ctx: Ctx, productId: number, inQty: number, in
   return avg;
 }
 
-export interface BatchInfo { batchNo?: string | null; expiryDate?: string | null }
+export interface BatchInfo {
+  batchNo?: string | null; expiryDate?: string | null;
+  /** lineage: who supplied the goods; for a transfer, the batch they came from and its original receipt time */
+  supplierId?: number | null; sourceBatchId?: number | null; receivedAt?: string | null;
+}
 
 /** Receive stock: updates WAC (before increasing on-hand), creates batch if needed, writes movement. */
 export function receiveStock(
@@ -114,30 +118,46 @@ export function receiveStock(
   return { batchId };
 }
 
+/**
+ * Every receipt is its own batch: quantity, cost, expiry, supplier and receipt time are kept per batch
+ * and are never merged into an older batch, so a new delivery can never change an old one.
+ */
 export function addToBatch(ctx: Ctx, productId: number, locationId: number, qty: number, unitCost: number, b: BatchInfo, refType?: string, refId?: number): number {
-  const db = ctx.db;
-  const existing = db.prepare(
-    `SELECT id FROM batches WHERE product_id = ? AND location_id = ? AND COALESCE(batch_no,'') = COALESCE(?, '') AND COALESCE(expiry_date,'') = COALESCE(?, '') ORDER BY id DESC LIMIT 1`,
-  ).get(productId, locationId, b.batchNo ?? null, b.expiryDate ?? null) as { id: number } | undefined;
-  if (existing) {
-    db.prepare('UPDATE batches SET qty = qty + ?, initial_qty = initial_qty + ? WHERE id = ?').run(qty, qty, existing.id);
-    return existing.id;
-  }
-  const info = db.prepare(
-    `INSERT INTO batches(product_id, location_id, batch_no, expiry_date, qty, initial_qty, unit_cost, received_at, ref_type, ref_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(productId, locationId, b.batchNo ?? null, b.expiryDate ?? null, qty, qty, unitCost, ts(ctx), refType ?? null, refId ?? null);
+  const info = ctx.db.prepare(
+    `INSERT INTO batches(product_id, location_id, batch_no, expiry_date, qty, initial_qty, unit_cost, received_at, ref_type, ref_id, supplier_id, source_batch_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(productId, locationId, b.batchNo ?? null, b.expiryDate ?? null, qty, qty, unitCost, b.receivedAt ?? ts(ctx), refType ?? null, refId ?? null, b.supplierId ?? null, b.sourceBatchId ?? null);
   return Number(info.lastInsertRowid);
 }
 
-/** First-Expiry-First-Out consumption of batch quantities. Returns allocations. */
-export function consumeBatches(ctx: Ctx, productId: number, locationId: number, qty: number): { batchId: number; qty: number }[] {
+/**
+ * What can legally be sold at a location: valid (not yet expired) batches plus any stock that predates
+ * batch tracking. A batch is expired from the day after its expiry date.
+ */
+export function sellableStock(ctx: Ctx, productId: number, locationId: number): { onHand: number; sellable: number; expired: number } {
+  const onHand = getStock(ctx, productId, locationId);
+  const p = loadProduct(ctx, productId);
+  if (!p.track_expiry) return { onHand, sellable: onHand, expired: 0 };
+  const r = ctx.db.prepare(
+    `SELECT COALESCE(SUM(qty),0) AS total, COALESCE(SUM(CASE WHEN expiry_date IS NOT NULL AND expiry_date < ? THEN qty ELSE 0 END),0) AS expired
+     FROM batches WHERE product_id = ? AND location_id = ? AND qty > 0`,
+  ).get(today(ctx), productId, locationId) as { total: number; expired: number };
+  const unbatched = Math.max(0, onHand - r.total);
+  return { onHand, sellable: Math.max(0, r.total - r.expired) + unbatched, expired: r.expired };
+}
+
+/**
+ * First-Expiry-First-Out consumption of batch quantities. Returns allocations.
+ * With `excludeExpired` (sales) batches past their expiry date are never touched.
+ */
+export function consumeBatches(ctx: Ctx, productId: number, locationId: number, qty: number, opts: { excludeExpired?: boolean } = {}): { batchId: number; qty: number }[] {
   const p = loadProduct(ctx, productId);
   if (!p.track_expiry) return [];
   const rows = ctx.db.prepare(
-    `SELECT id, qty FROM batches WHERE product_id = ? AND location_id = ? AND qty > 0
+    `SELECT id, qty FROM batches WHERE product_id = @p AND location_id = @l AND qty > 0
+       ${opts.excludeExpired ? 'AND (expiry_date IS NULL OR expiry_date >= @t)' : ''}
      ORDER BY CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END, expiry_date, id`,
-  ).all(productId, locationId) as { id: number; qty: number }[];
+  ).all({ p: productId, l: locationId, t: today(ctx) }) as { id: number; qty: number }[];
   let remaining = qty;
   const out: { batchId: number; qty: number }[] = [];
   const upd = ctx.db.prepare('UPDATE batches SET qty = qty - ? WHERE id = ?');
@@ -159,14 +179,45 @@ export function restoreBatches(ctx: Ctx, allocations: { batchId: number; qty: nu
 /** Remove stock (sale, damage, etc.) at the current average cost. */
 export function issueStock(
   ctx: Ctx,
-  args: { productId: number; locationId: number; qty: number; type: MovementType; refType?: string; refId?: number; note?: string | null; allowNegative?: boolean },
+  args: { productId: number; locationId: number; qty: number; type: MovementType; refType?: string; refId?: number; note?: string | null; allowNegative?: boolean; sellableOnly?: boolean },
 ): { unitCost: number; costTotal: number; batches: { batchId: number; qty: number }[] } {
   if (args.qty <= 0) throw new AppError('INVALID_QTY');
   const p = loadProduct(ctx, args.productId);
+  if (args.sellableOnly && p.track_expiry) {
+    // never sell expired goods — enforced here, whatever the UI or the negative-stock setting says
+    const st = sellableStock(ctx, args.productId, args.locationId);
+    if (st.expired > 0 && args.qty > st.sellable) {
+      throw new AppError('EXPIRED_STOCK', { name: p.name, available: formatQty(st.sellable), expired: formatQty(st.expired) });
+    }
+  }
   const unitCost = p.avg_cost;
   applyMovement(ctx, { ...args, qty: -args.qty, unitCost });
-  const batches = consumeBatches(ctx, args.productId, args.locationId, args.qty);
+  const batches = consumeBatches(ctx, args.productId, args.locationId, args.qty, { excludeExpired: args.sellableOnly });
   return { unitCost, costTotal: Math.round((unitCost * args.qty) / 1000), batches };
+}
+
+/**
+ * Remove stock from one specific batch (supplier return of that batch). Refuses an unknown batch, a batch
+ * of another product or location, more than the batch holds, and anything that would make stock negative.
+ */
+export function issueFromBatch(
+  ctx: Ctx,
+  args: { batchId: number; productId: number; locationId: number; qty: number; type: MovementType; refType?: string; refId?: number; note?: string | null },
+): { unitCost: number; costTotal: number; batch: BatchRow } {
+  if (!Number.isInteger(args.qty) || args.qty <= 0) throw new AppError('INVALID_QTY');
+  const b = ctx.db.prepare('SELECT * FROM batches WHERE id = ?').get(args.batchId) as BatchRow | undefined;
+  if (!b || b.product_id !== args.productId || b.location_id !== args.locationId) throw new AppError('BATCH_NOT_FOUND');
+  const p = loadProduct(ctx, args.productId);
+  if (args.qty > b.qty) throw new AppError('RETURN_EXCEEDS_BATCH', { name: p.name, available: formatQty(b.qty) });
+  const unitCost = p.avg_cost;
+  applyMovement(ctx, { ...args, qty: -args.qty, unitCost, allowNegative: false });
+  ctx.db.prepare('UPDATE batches SET qty = qty - ? WHERE id = ? AND qty >= ?').run(args.qty, b.id, args.qty);
+  return { unitCost, costTotal: Math.round((unitCost * args.qty) / 1000), batch: b };
+}
+
+export interface BatchRow {
+  id: number; product_id: number; location_id: number; batch_no: string | null; expiry_date: string | null; qty: number; initial_qty: number;
+  unit_cost: number; received_at: string; ref_type: string | null; ref_id: number | null; supplier_id: number | null; purchase_item_id: number | null; source_batch_id: number | null;
 }
 
 /* ------------------------------------------------------------------ documents */
@@ -217,10 +268,11 @@ export function createTransfer(ctx: Ctx, raw: unknown) {
       const out = issueStock(ctx, { productId: l.productId, locationId: input.fromLocationId, qty: l.qty, type: 'transfer_out', refType: 'inventory_doc', refId: docId });
       applyMovement(ctx, { productId: l.productId, locationId: input.toLocationId, type: 'transfer_in', qty: l.qty, unitCost: out.unitCost, refType: 'inventory_doc', refId: docId, allowNegative: true });
       // move batch quantities along with the goods
-      const toRow = ctx.db.prepare('SELECT batch_no, expiry_date, unit_cost FROM batches WHERE id = ?');
+      const toRow = ctx.db.prepare('SELECT batch_no, expiry_date, unit_cost, supplier_id, received_at FROM batches WHERE id = ?');
       for (const a of out.batches) {
-        const b = toRow.get(a.batchId) as { batch_no: string | null; expiry_date: string | null; unit_cost: number };
-        addToBatch(ctx, l.productId, input.toLocationId, a.qty, b.unit_cost, { batchNo: b.batch_no, expiryDate: b.expiry_date }, 'inventory_doc', docId);
+        const b = toRow.get(a.batchId) as { batch_no: string | null; expiry_date: string | null; unit_cost: number; supplier_id: number | null; received_at: string };
+        addToBatch(ctx, l.productId, input.toLocationId, a.qty, b.unit_cost,
+          { batchNo: b.batch_no, expiryDate: b.expiry_date, supplierId: b.supplier_id, sourceBatchId: a.batchId, receivedAt: b.received_at }, 'inventory_doc', docId);
       }
     }
     audit(ctx, 'inventory.transfer', 'inventory_doc', docId, undefined, input);

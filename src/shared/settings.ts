@@ -33,7 +33,9 @@ export interface StoreSettings {
   'tax.rate': number; // percent
   'tax.inclusive': boolean;
   'inventory.lowStockDefault': number;
-  'inventory.expiryAlertDays': number;
+  'inventory.expiryAlertDays': number; // "near" tier
+  'inventory.expiryCriticalDays': number; // "very near" tier
+  'inventory.expiryWatchDays': number; // "follow-up" tier
   'inventory.deadStockDays': number;
   'inventory.reorderCoverDays': number;
   'print.type': 'thermal80' | 'thermal58' | 'a4';
@@ -98,6 +100,8 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   'tax.inclusive': true,
   'inventory.lowStockDefault': 0,
   'inventory.expiryAlertDays': 30,
+  'inventory.expiryCriticalDays': 7,
+  'inventory.expiryWatchDays': 90,
   'inventory.deadStockDays': 30,
   'inventory.reorderCoverDays': 7,
   'print.type': 'thermal80',

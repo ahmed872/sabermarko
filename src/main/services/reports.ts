@@ -1,6 +1,7 @@
 import { AppError } from '../../shared/errors';
 import { type Ctx, addDays, audit, can, getSetting, requirePerm, today, ts, tx } from './context';
 import { openShifts } from './shifts';
+import { formatQty } from '../../shared/qty';
 
 /**
  * SINGLE SOURCE OF TRUTH for financial figures. Dashboard, daily closing,
@@ -252,6 +253,64 @@ export function expiringBatches(ctx: Ctx, days?: number) {
   ).all({ limit, today: today(ctx) });
 }
 
+export type ExpiryTier = 'expired' | 'critical' | 'near' | 'watch';
+
+/** Expiry tiers from the store's settings: expired / ≤ critical / ≤ near / ≤ watch days. */
+export function expiryTiers(ctx: Ctx) {
+  const critical = Math.max(1, getSetting(ctx.db, 'inventory.expiryCriticalDays'));
+  const near = Math.max(critical, getSetting(ctx.db, 'inventory.expiryAlertDays'));
+  const watch = Math.max(near, getSetting(ctx.db, 'inventory.expiryWatchDays'));
+  const tierOf = (daysLeft: number): ExpiryTier => (daysLeft < 0 ? 'expired' : daysLeft <= critical ? 'critical' : daysLeft <= near ? 'near' : 'watch');
+  return { critical, near, watch, tierOf };
+}
+
+/**
+ * The owner's expiry dashboard: every batch still in stock that expires within the watch horizon (or already
+ * expired), with quantity, its own purchase cost and value, supplier, days left, recent sales pace and a
+ * suggested action. Suggestions only — nothing is done automatically.
+ */
+export function expiryOverview(ctx: Ctx) {
+  requirePerm(ctx, 'inventory.view');
+  const showCost = can(ctx, 'reports.cost');
+  const t = today(ctx);
+  const { critical, near, watch, tierOf } = expiryTiers(ctx);
+  const rows = ctx.db.prepare(
+    `SELECT b.id AS batch_id, b.batch_no, b.expiry_date, b.qty, b.initial_qty, b.unit_cost, b.received_at, b.location_id, l.name AS location_name,
+            p.id AS product_id, p.name, p.variant_name, p.base_unit_id, u.symbol AS unit_symbol, u.allow_decimal,
+            COALESCE(b.supplier_id, pu.supplier_id) AS supplier_id, s.name AS supplier_name, pu.purchase_no,
+            CAST(julianday(b.expiry_date) - julianday(@t) AS INTEGER) AS days_left,
+            (SELECT COALESCE(SUM(si.base_qty),0) FROM sale_items si JOIN sales sa ON sa.id = si.sale_id
+              WHERE si.product_id = p.id AND sa.status = 'completed' AND sa.business_date > date(@t, '-30 days')) AS sold30
+     FROM batches b JOIN products p ON p.id = b.product_id JOIN units u ON u.id = p.base_unit_id JOIN locations l ON l.id = b.location_id
+     LEFT JOIN purchases pu ON b.ref_type = 'purchase' AND pu.id = b.ref_id
+     LEFT JOIN suppliers s ON s.id = COALESCE(b.supplier_id, pu.supplier_id)
+     WHERE b.qty > 0 AND b.expiry_date IS NOT NULL AND b.expiry_date <= @lim
+     ORDER BY b.expiry_date, p.name LIMIT 2000`,
+  ).all({ t, lim: addDays(t, watch) }) as Record<string, any>[];
+  const items = rows.map((r): any => {
+    const tier = tierOf(r.days_left);
+    const value = Math.round((r.qty * r.unit_cost) / 1000);
+    const perDay = r.sold30 / 30;
+    // what the current pace will not sell before the date (FEFO is applied by the POS, so this is per batch)
+    let unsold = tier === 'expired' ? r.qty : Math.max(0, r.qty - Math.floor(perDay * (r.days_left + 1)));
+    if (!r.allow_decimal) unsold = Math.ceil(unsold / 1000) * 1000; // whole pieces, never "36.534 pieces"
+    let action: 'dispose' | 'return' | 'promote' | 'monitor';
+    if (tier === 'expired') action = r.supplier_id ? 'return' : 'dispose';
+    else if (unsold > 0 && r.supplier_id && tier !== 'watch') action = 'return';
+    else if (unsold > 0) action = 'promote';
+    else action = 'monitor';
+    return {
+      ...r, tier, unsold, perDay: r.allow_decimal ? Math.round(perDay) : Math.round(perDay / 100) * 100, action,
+      unit_cost: showCost ? r.unit_cost : null, value: showCost ? value : null,
+    };
+  });
+  const summary = (['expired', 'critical', 'near', 'watch'] as ExpiryTier[]).map((tier) => {
+    const xs = items.filter((i: any) => i.tier === tier);
+    return { tier, batches: xs.length, products: new Set(xs.map((i: any) => i.product_id)).size, qty: xs.reduce((a: number, i: any) => a + i.qty, 0), value: showCost ? xs.reduce((a: number, i: any) => a + (i.value ?? 0), 0) : null };
+  });
+  return { thresholds: { critical, near, watch }, summary, items };
+}
+
 export function inventoryValuation(ctx: Ctx) {
   requirePerm(ctx, 'inventory.view');
   const showCost = can(ctx, 'reports.cost');
@@ -302,10 +361,36 @@ export function alerts(ctx: Ctx) {
     const neg = (db.prepare(`SELECT COUNT(*) AS n FROM (SELECT product_id, SUM(qty) AS q FROM product_stock GROUP BY product_id) WHERE q < 0`).get() as { n: number }).n;
     if (neg) out.push({ key: 'negative', level: 'danger', count: neg, text: `${neg} منتج رصيده بالسالب — يحتاج جرد أو تسجيل مشتريات`, link: '/products?stock=negative' });
     if (getSetting(db, 'features.expiry')) {
-      const lim = addDays(today(ctx), getSetting(db, 'inventory.expiryAlertDays'));
-      const exp = db.prepare(`SELECT SUM(CASE WHEN expiry_date < @t THEN 1 ELSE 0 END) AS expired, COUNT(*) AS soon FROM batches WHERE qty > 0 AND expiry_date IS NOT NULL AND expiry_date <= @lim`).get({ t: today(ctx), lim }) as { expired: number; soon: number };
-      if (exp.expired) out.push({ key: 'expired', level: 'danger', count: exp.expired, text: `${exp.expired} دفعة منتهية الصلاحية ما زالت في المخزون`, link: '/inventory/expiry' });
-      if (exp.soon - (exp.expired ?? 0) > 0) out.push({ key: 'expiring', level: 'warning', count: exp.soon - exp.expired, text: `${exp.soon - exp.expired} دفعة تنتهي صلاحيتها قريبًا`, link: '/inventory/expiry' });
+      // tiered expiry alerts: expired (never sellable) / very near / near — each with its most urgent example
+      const t = today(ctx);
+      const { critical, near } = expiryTiers(ctx);
+      const rows = db.prepare(
+        `SELECT p.name, u.symbol, SUM(b.qty) AS qty, MIN(b.expiry_date) AS exp, COUNT(*) AS n,
+                CASE WHEN b.expiry_date < @t THEN 'expired' WHEN b.expiry_date <= @c THEN 'critical' ELSE 'near' END AS tier
+         FROM batches b JOIN products p ON p.id = b.product_id JOIN units u ON u.id = p.base_unit_id
+         WHERE b.qty > 0 AND b.expiry_date IS NOT NULL AND b.expiry_date <= @n
+         GROUP BY tier, p.id ORDER BY MIN(b.expiry_date)`,
+      ).all({ t, c: addDays(t, critical), n: addDays(t, near) }) as { name: string; symbol: string; qty: number; exp: string; n: number; tier: string }[];
+      const q = (v: number) => formatQty(v);
+      const days = (d: string) => Math.max(0, Math.round((Date.parse(`${d}T00:00:00`) - Date.parse(`${t}T00:00:00`)) / 86_400_000));
+      const expired = rows.filter((r) => r.tier === 'expired');
+      const crit = rows.filter((r) => r.tier === 'critical');
+      const nearRows = rows.filter((r) => r.tier === 'near');
+      if (expired.length) {
+        const top = expired[0];
+        out.push({ key: 'expired', level: 'danger', count: expired.reduce((a, r) => a + r.n, 0),
+          text: `⛔ ${expired.length} منتج عليه كمية منتهية الصلاحية لا تُباع — مثل ${q(top.qty)} ${top.symbol} من ${top.name}. سجّلها كتالف أو أرجعها للمورد.`, link: '/inventory/expiry' });
+      }
+      if (crit.length) {
+        const top = crit[0];
+        out.push({ key: 'expiring', level: 'danger', count: crit.reduce((a, r) => a + r.n, 0),
+          text: `⚠️ يوجد ${q(top.qty)} ${top.symbol} من ${top.name} ستنتهي خلال ${days(top.exp)} يوم${crit.length > 1 ? ` (+${crit.length - 1} منتج آخر خلال ${critical} أيام)` : ''}.`, link: '/inventory/expiry' });
+      }
+      if (nearRows.length) {
+        const top = nearRows[0];
+        out.push({ key: 'expiring_near', level: 'warning', count: nearRows.reduce((a, r) => a + r.n, 0),
+          text: `⚠️ يوجد ${q(top.qty)} ${top.symbol} من ${top.name} ستنتهي خلال ${days(top.exp)} يومًا${nearRows.length > 1 ? ` (+${nearRows.length - 1} منتج آخر خلال ${near} يومًا)` : ''}.`, link: '/inventory/expiry' });
+      }
     }
   }
   if (can(ctx, 'sales.view')) {

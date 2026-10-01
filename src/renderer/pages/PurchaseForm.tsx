@@ -123,7 +123,7 @@ export default function PurchaseForm() {
                     <td><QtyInput value={l.qty} allowEmpty onChange={(v) => upd(i, { qty: v })} /></td>
                     <td><MoneyInput value={l.unitCost} allowEmpty onChange={(v) => upd(i, { unitCost: v })} /></td>
                     <td><MoneyInput value={l.discount} allowEmpty onChange={(v) => upd(i, { discount: v })} /></td>
-                    {feature('expiry') && <td>{l.trackExpiry ? <input type="date" className="input" value={l.expiryDate} onChange={(e) => upd(i, { expiryDate: e.target.value })} /> : <span className="muted xs">—</span>}</td>}
+                    {feature('expiry') && <td>{l.trackExpiry ? <div className="col" style={{ gap: 4 }}><input type="date" className="input" aria-label="تاريخ الصلاحية" value={l.expiryDate} onChange={(e) => upd(i, { expiryDate: e.target.value })} /><input className="input sm" dir="ltr" placeholder="رقم الدفعة (اختياري)" value={l.batchNo} onChange={(e) => upd(i, { batchNo: e.target.value })} /></div> : <span className="muted xs">—</span>}</td>}
                     {can('products.edit_price') && <td><MoneyInput value={l.newSellPrice} allowEmpty placeholder={money(l.sellPrice, false)} onChange={(v) => upd(i, { newSellPrice: v })} /></td>}
                     <td className="n bold">{money(lineTotal(l))}</td>
                     <td><button className="btn ghost sm icon" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}><Trash2 size={14} /></button></td>

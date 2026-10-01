@@ -697,4 +697,16 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX idx_sale_items_promo ON sale_items(promotion_id) WHERE promotion_id IS NOT NULL;
   `,
+  /* ---------------------------------------------------------------- v3: batch lineage + batch-aware supplier returns */
+  `
+  -- every received quantity is its own batch: who supplied it, from which purchase line, and (after a
+  -- transfer) which batch it came from; supplier returns record the exact batch they took stock from
+  ALTER TABLE batches ADD COLUMN supplier_id INTEGER REFERENCES suppliers(id);
+  ALTER TABLE batches ADD COLUMN purchase_item_id INTEGER REFERENCES purchase_items(id);
+  ALTER TABLE batches ADD COLUMN source_batch_id INTEGER REFERENCES batches(id);
+  ALTER TABLE purchase_return_items ADD COLUMN batch_id INTEGER REFERENCES batches(id);
+  UPDATE batches SET supplier_id = (SELECT p.supplier_id FROM purchases p WHERE p.id = batches.ref_id) WHERE ref_type = 'purchase';
+  UPDATE batches SET purchase_item_id = (SELECT pi.id FROM purchase_items pi WHERE pi.batch_id = batches.id ORDER BY pi.id LIMIT 1) WHERE ref_type = 'purchase';
+  CREATE INDEX idx_batches_supplier ON batches(supplier_id) WHERE supplier_id IS NOT NULL;
+  `,
 ];

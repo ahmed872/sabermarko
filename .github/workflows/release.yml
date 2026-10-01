@@ -49,19 +49,55 @@ jobs:
           $f = (Get-ChildItem release -Filter 'SaberMarko-POS-Setup-*.exe' | Select-Object -First 1).FullName
           $s = Get-AuthenticodeSignature $f
           Write-Host "Authenticode status of $(Split-Path $f -Leaf): $($s.Status)"
-      - name: Smoke-test the installer (silent install, files present, silent uninstall)
+      - name: Verify the installer on Windows (size, version, install, shortcuts, app launch, uninstall)
         shell: pwsh
         run: |
-          $f = (Get-ChildItem release -Filter 'SaberMarko-POS-Setup-*.exe' | Select-Object -First 1).FullName
-          $p = Start-Process $f -ArgumentList '/S' -Wait -PassThru
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $setup = Get-ChildItem release -Filter "SaberMarko-POS-Setup-$version.exe" | Select-Object -First 1
+          if (-not $setup) { throw "release/SaberMarko-POS-Setup-$version.exe not found (version mismatch?)" }
+          $mb = [math]::Round($setup.Length / 1MB, 1)
+          Write-Host "installer: $($setup.Name) $mb MB"
+          if ($mb -lt 50 -or $mb -gt 400) { throw "installer size $mb MB is outside the expected 50-400 MB" }
+
+          # silent per-user install
+          $p = Start-Process $setup.FullName -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "installer exit code $($p.ExitCode)" }
-          $exe = Join-Path $env:LOCALAPPDATA 'Programs\SaberMarko POS\SaberMarko POS.exe'
-          if (-not (Test-Path $exe)) { throw "installed exe not found at $exe" }
-          $u = Join-Path $env:LOCALAPPDATA 'Programs\SaberMarko POS\Uninstall SaberMarko POS.exe'
-          Start-Process $u -ArgumentList '/S' -Wait
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\SaberMarko POS'
+          $exe = Join-Path $dir 'SaberMarko POS.exe'
+          foreach ($f in @($exe, (Join-Path $dir 'resources\app.asar'), (Join-Path $dir 'Uninstall SaberMarko POS.exe'))) {
+            if (-not (Test-Path $f)) { throw "missing after install: $f" }
+          }
+          $fileVersion = (Get-Item $exe).VersionInfo.ProductVersion
+          Write-Host "installed exe version: $fileVersion"
+          if (-not $fileVersion.StartsWith($version)) { throw "installed exe version $fileVersion != package version $version" }
+          $links = @(Get-ChildItem -Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs", ([Environment]::GetFolderPath('Desktop')), "$env:PUBLIC\Desktop" -Filter *.lnk -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { (New-Object -ComObject WScript.Shell).CreateShortcut($_.FullName).TargetPath -eq $exe })
+          Write-Host "shortcuts: $($links.FullName -join ', ')"
+          if ($links.Count -lt 1) { throw 'no Start Menu / Desktop shortcut points to the installed exe' }
+
+          # launch the installed app with a throw-away data folder; it must start, create its database and log, and keep running
+          $ud = Join-Path $env:RUNNER_TEMP 'sbm-launch'
+          $env:SBM_USER_DATA = $ud
+          $app = Start-Process $exe -PassThru
+          $deadline = (Get-Date).AddSeconds(60)
+          while ((Get-Date) -lt $deadline -and -not (Select-String -Path "$ud\logs\*" -Pattern "app started v$version \(win32\)" -Quiet -ErrorAction SilentlyContinue)) { Start-Sleep -Seconds 2 }
+          if (-not (Select-String -Path "$ud\logs\*" -Pattern "app started v$version \(win32\)" -Quiet -ErrorAction SilentlyContinue)) { Get-ChildItem -Recurse $ud -ErrorAction SilentlyContinue; throw 'the installed app did not log a successful start within 60 s' }
+          Start-Sleep -Seconds 10
+          if ($app.HasExited) { throw "the installed app exited by itself (code $($app.ExitCode))" }
+          if (-not (Test-Path "$ud\data\store.db")) { throw 'the app did not create its database' }
+          Get-Content "$ud\logs\*" | Select-Object -First 20
+          Get-Process | Where-Object { $_.Path -eq $exe } | Stop-Process -Force
+          Start-Sleep -Seconds 3
+          Remove-Item Env:SBM_USER_DATA
+
+          # silent uninstall: program removed, store data kept
+          Start-Process (Join-Path $dir 'Uninstall SaberMarko POS.exe') -ArgumentList '/S' -Wait
           Start-Sleep -Seconds 5
           if (Test-Path $exe) { throw 'uninstall left the program behind' }
-          Write-Host 'installer smoke test passed (this is NOT a runtime test of the app UI)'
+          if (-not (Test-Path "$ud\data\store.db")) { throw 'uninstall deleted store data' }
+          Write-Host "INSTALLER VERIFIED on Windows: size, version $version, files, shortcuts, launch (process alive, DB + log created), uninstall (data kept)."
+          Write-Host 'NOT verified here: the UI on a real screen, receipt printing on a real printer.'
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer

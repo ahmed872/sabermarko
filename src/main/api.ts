@@ -162,6 +162,7 @@ export const routes: Record<string, Route> = {
   'reports.reorder': { fn: (c, p) => reports.reorderSuggestions(c, p ?? {}) },
   'reports.deadStock': { fn: (c, p) => reports.deadStock(c, p?.days) },
   'reports.expiring': { fn: (c, p) => reports.expiringBatches(c, p?.days) },
+  'inventory.expiry': { fn: (c) => reports.expiryOverview(c) },
   'reports.valuation': { fn: (c) => reports.inventoryValuation(c) },
   'reports.debts': { fn: (c) => reports.debtsReport(c) },
   'reports.purchases': { fn: (c, p) => reports.purchasesReport(c, p.from, p.to) },

@@ -22,7 +22,7 @@ const CASHIER_ALLOWED = new Set([
   'auth.changePassword', 'settings.get', 'users.names', 'users.quota', 'roles.list',
   'products.list', 'products.get', 'products.priceHistory', 'pos.search', 'pos.product',
   'categories.list', 'brands.list', 'units.list', 'groups.list', 'priceLists.list', 'locations.list', 'promotions.list',
-  'inventory.ledger', 'inventory.movements', 'inventory.batches', 'inventory.docs',
+  'inventory.ledger', 'inventory.movements', 'inventory.batches', 'inventory.docs', 'inventory.expiry',
   'sales.quote', 'sales.checkout', 'sales.get', 'sales.find', 'sales.list', 'sales.void',
   'returns.create', 'returns.get', 'returns.list',
   'held.create', 'held.list', 'held.get', 'held.delete',

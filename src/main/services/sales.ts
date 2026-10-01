@@ -1,11 +1,11 @@
 import { AppError } from '../../shared/errors';
 import { formatMoney } from '../../shared/money';
-import { toBaseQty } from '../../shared/qty';
+import { formatQty, toBaseQty } from '../../shared/qty';
 import { checkoutInput, returnInput, cartInput, type CheckoutInput, type ReturnInput, type CartInput } from '../../shared/schemas';
 import {
   type Ctx, addDays, audit, can, defaultLocationId, docNo, getSetting, requirePerm, requirePermOrApproval, requireUser, today, ts, tx,
 } from './context';
-import { applyMovement, issueStock, restoreBatches, updateAverageCost } from './inventory';
+import { applyMovement, issueStock, restoreBatches, sellableStock, updateAverageCost } from './inventory';
 import { postLedger } from './parties';
 import { missingApprovals, priceCart } from './pricing';
 import { addCashMovement, currentShift, expectedCash, shiftForCash } from './shifts';
@@ -21,7 +21,22 @@ function isDayClosed(ctx: Ctx, date: string): boolean {
 export function quoteCart(ctx: Ctx, cart: CartInput) {
   requirePerm(ctx, 'pos.sell');
   const priced = priceCart(ctx, cart);
+  assertSellable(ctx, priced.lines);
   return { ...priced, missingApprovals: missingApprovals(ctx, priced) };
+}
+
+/** Warn the cashier while the cart is being built: expired goods can never be sold (checkout enforces it too). */
+function assertSellable(ctx: Ctx, lines: { productId: number; baseQty: number }[]) {
+  const loc = defaultLocationId(ctx.db);
+  const need = new Map<number, number>();
+  for (const l of lines) need.set(l.productId, (need.get(l.productId) ?? 0) + l.baseQty);
+  for (const [pid, q] of need) {
+    const st = sellableStock(ctx, pid, loc);
+    if (st.expired > 0 && q > st.sellable) {
+      const name = (ctx.db.prepare('SELECT name FROM products WHERE id = ?').get(pid) as { name: string }).name;
+      throw new AppError('EXPIRED_STOCK', { name, available: formatQty(st.sellable), expired: formatQty(st.expired) });
+    }
+  }
 }
 
 /**
@@ -99,7 +114,7 @@ export function checkout(ctx: Ctx, raw: CheckoutInput) {
     const insBatch = ctx.db.prepare('INSERT INTO sale_item_batches(sale_item_id, batch_id, qty) VALUES (?, ?, ?)');
     let cogs = 0;
     for (const l of priced.lines) {
-      const out = issueStock(ctx, { productId: l.productId, locationId, qty: l.baseQty, type: 'sale', refType: 'sale', refId: saleId, allowNegative });
+      const out = issueStock(ctx, { productId: l.productId, locationId, qty: l.baseQty, type: 'sale', refType: 'sale', refId: saleId, allowNegative, sellableOnly: true });
       cogs += out.costTotal;
       const itemId = Number(insItem.run({
         sale: saleId, pid: l.productId, uid: l.unitId, pname: l.productName, uname: l.unitName, qty: l.qty, factor: l.factor, base: l.baseQty,

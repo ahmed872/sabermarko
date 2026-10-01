@@ -32,6 +32,10 @@ export interface ProductMetrics {
   lastSale: string | null; daysSinceLast: number | null; longGap: number | null; // typical days between sales (180d)
   /** expiredQty: already past its date — must be disposed, never discounted. atRiskQty: still sellable but will not sell in time. */
   expiry: { batchQty: number; nearestDate: string; daysLeft: number; atRiskQty: number; expiredQty: number } | null;
+  /** stock that may legally be sold (expired batches excluded) */
+  sellableStock: number;
+  /** last date any of the sellable stock can be sold (latest valid batch expiry); null = no limit known */
+  sellUntil: string | null;
   classes: ProductClass[];
   primary: ProductClass;
   reasons: string[];
@@ -103,6 +107,15 @@ export function productMetrics(ctx: Ctx, opts: { windowDays?: number; asOf?: str
   const batchRows = expiryOn
     ? (db.prepare(`SELECT product_id, expiry_date, SUM(qty) AS qty FROM batches WHERE qty > 0 AND expiry_date IS NOT NULL AND expiry_date <= ? GROUP BY product_id, expiry_date ORDER BY expiry_date`).all(expiryHorizon) as { product_id: number; expiry_date: string; qty: number }[])
     : [];
+  // per product: latest valid expiry, and whether part of the stock has no known expiry (then no limit)
+  const sellLimit = new Map<number, { latest: string | null; batched: number; undated: number }>();
+  if (expiryOn) {
+    for (const r of db.prepare(
+      `SELECT product_id, MAX(CASE WHEN expiry_date >= @t THEN expiry_date END) AS latest, SUM(qty) AS batched,
+              SUM(CASE WHEN expiry_date IS NULL THEN qty ELSE 0 END) AS undated
+       FROM batches WHERE qty > 0 GROUP BY product_id`,
+    ).all({ t: to }) as { product_id: number; latest: string | null; batched: number; undated: number }[]) sellLimit.set(r.product_id, r);
+  }
   const batchesBy = new Map<number, { expiry_date: string; qty: number }[]>();
   for (const b of batchRows) { if (!batchesBy.has(b.product_id)) batchesBy.set(b.product_id, []); batchesBy.get(b.product_id)!.push(b); }
 
@@ -154,6 +167,8 @@ export function productMetrics(ctx: Ctx, opts: { windowDays?: number; asOf?: str
     return {
       id: r.id, name: r.variant_name ? `${r.name} ${r.variant_name}` : r.name, categoryId: r.category_id, category: r.category, unitSymbol: r.unit_symbol, allowDecimal: !!r.allow_decimal,
       price: r.sell_price, avgCost, marginUnit, marginPct, stock, stockValue, ageDays, effWindow, soldQty, invoices: r.inv, revenue: r.rev, cost: r.cost, profit: r.rev - r.cost,
+      sellableStock: Math.max(0, stock - (expiry?.expiredQty ?? 0)),
+      sellUntil: (() => { const l = sellLimit.get(r.id); return l && l.undated === 0 && stock <= l.batched ? l.latest : null; })(),
       velocity, weekVelocity, prevVelocity, trend, daysCover, turnover, lastSale: r.last_sale, daysSinceLast, longGap, expiry,
       classes: [], primary: 'stable' as ProductClass, reasons: [],
     };
