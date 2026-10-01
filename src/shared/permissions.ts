@@ -32,6 +32,8 @@ export const PERMISSIONS = {
   'cash.manage': 'سحب وإيداع نقدية في الدرج',
   'shifts.close_others': 'إغلاق وردية كاشير آخر',
   'shifts.view_all': 'عرض كل الورديات',
+  'promotions.approve': 'اعتماد العروض المقترحة',
+  'promotions.override': 'اعتماد عرض رغم تحذير الربحية',
   'reports.view': 'التقارير والأرباح',
   'reports.cost': 'رؤية التكلفة والأرباح',
   'day.close': 'إغلاق اليوم',
@@ -50,7 +52,7 @@ export const PERMISSION_GROUPS: { label: string; keys: Permission[] }[] = [
   { label: 'المنتجات والمخزون', keys: ['products.view', 'products.manage', 'products.edit_price', 'products.edit_cost', 'products.delete', 'inventory.view', 'inventory.adjust', 'inventory.stocktake', 'inventory.transfer'] },
   { label: 'المشتريات والموردون', keys: ['purchases.view', 'purchases.manage', 'purchase_orders.manage', 'suppliers.manage', 'suppliers.pay'] },
   { label: 'العملاء والمالية', keys: ['customers.manage', 'customers.collect', 'customers.adjust_balance', 'expenses.manage', 'cash.manage', 'shifts.close_others', 'shifts.view_all', 'day.close'] },
-  { label: 'الإدارة', keys: ['reports.view', 'reports.cost', 'users.manage', 'settings.manage', 'backup.manage', 'audit.view', 'license.manage'] },
+  { label: 'الإدارة', keys: ['promotions.approve', 'promotions.override', 'reports.view', 'reports.cost', 'users.manage', 'settings.manage', 'backup.manage', 'audit.view', 'license.manage'] },
 ];
 
 export interface RoleTemplate { code: string; name: string; permissions: Permission[] | '*' }

@@ -37,6 +37,18 @@ export function seedSystemData(db: DB): void {
     for (const r of SYSTEM_ROLES) {
       insRole.run(r.code, r.name, JSON.stringify(r.permissions === '*' ? '*' : r.permissions));
     }
+    // one-time permission upgrades for existing system roles (new features added in later schema versions)
+    const upgraded = db.prepare(`SELECT 1 FROM app_meta WHERE key = 'perm_upgrade_v2'`).get();
+    if (!upgraded) {
+      const mgr = db.prepare(`SELECT permissions FROM roles WHERE code = 'manager'`).get() as { permissions: string } | undefined;
+      if (mgr) {
+        const perms = new Set<string>(JSON.parse(mgr.permissions));
+        perms.add('promotions.approve');
+        perms.add('promotions.override');
+        db.prepare(`UPDATE roles SET permissions = ? WHERE code = 'manager'`).run(JSON.stringify([...perms]));
+      }
+      db.prepare(`INSERT INTO app_meta(key, value) VALUES ('perm_upgrade_v2', '1') ON CONFLICT(key) DO NOTHING`).run();
+    }
     const insUnit = db.prepare('INSERT INTO units(name, symbol, kind, allow_decimal, is_system) VALUES (?, ?, ?, ?, 1) ON CONFLICT(name) DO NOTHING');
     for (const u of SYSTEM_UNITS) insUnit.run(u.name, u.symbol, u.kind, u.allowDecimal ? 1 : 0);
     db.prepare(`INSERT INTO price_lists(code, name, is_default) VALUES ('retail', 'سعر القطاعي', 1) ON CONFLICT(code) DO NOTHING`).run();

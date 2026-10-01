@@ -638,4 +638,63 @@ export const MIGRATIONS: string[] = [
     backup_file TEXT
   );
   `,
+  /* ---------------------------------------------------------------- v2: smart retail intelligence */
+  `
+  -- promotions gain cross-product rules (buy A -> reward on B, A+B combo price) and a link to the suggestion that created them
+  CREATE TABLE promotions_v2 (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('percent','amount','bundle','bxgy','cross','combo')),
+    product_id INTEGER REFERENCES products(id),
+    category_id INTEGER REFERENCES categories(id),
+    min_qty INTEGER NOT NULL DEFAULT 1000,
+    get_qty INTEGER NOT NULL DEFAULT 0,
+    value INTEGER NOT NULL DEFAULT 0,
+    reward_product_id INTEGER REFERENCES products(id),
+    reward_qty INTEGER NOT NULL DEFAULT 0,       -- milli base units of the reward product per deal
+    reward_type TEXT CHECK (reward_type IS NULL OR reward_type IN ('free','percent')),
+    max_per_invoice INTEGER,                     -- cap on deals per invoice (protects fast movers used as gifts)
+    start_date TEXT,
+    end_date TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    suggestion_id INTEGER,
+    reason TEXT,
+    baseline TEXT,                               -- JSON snapshot of metrics before the promotion
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL
+  );
+  INSERT INTO promotions_v2(id, name, type, product_id, category_id, min_qty, get_qty, value, start_date, end_date, active, created_at)
+    SELECT id, name, type, product_id, category_id, min_qty, get_qty, value, start_date, end_date, active, created_at FROM promotions;
+  DROP TABLE promotions;
+  ALTER TABLE promotions_v2 RENAME TO promotions;
+  CREATE INDEX idx_promotions_active ON promotions(active, start_date, end_date);
+
+  CREATE TABLE promotion_suggestions (
+    id INTEGER PRIMARY KEY,
+    period TEXT NOT NULL,                        -- YYYY-MM the suggestion was generated for
+    kind TEXT NOT NULL CHECK (kind IN ('clearance','pair','bundle','expiry','quantity')),
+    status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','approved','rejected','dismissed','expired')),
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    partner_product_id INTEGER REFERENCES products(id),
+    score REAL NOT NULL DEFAULT 0,
+    verdict TEXT NOT NULL DEFAULT 'ok' CHECK (verdict IN ('good','ok','review')),
+    payload TEXT NOT NULL,                       -- proposal, simulation, reasons (JSON)
+    generated_at TEXT NOT NULL,
+    decided_by INTEGER REFERENCES users(id),
+    decided_at TEXT,
+    decision_note TEXT,
+    promotion_id INTEGER REFERENCES promotions(id)
+  );
+  CREATE INDEX idx_suggestions_period ON promotion_suggestions(period, status);
+  CREATE INDEX idx_suggestions_product ON promotion_suggestions(product_id, kind);
+
+  CREATE TABLE suggestion_mutes (
+    id INTEGER PRIMARY KEY,
+    product_id INTEGER REFERENCES products(id),
+    kind TEXT,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_sale_items_promo ON sale_items(promotion_id) WHERE promotion_id IS NOT NULL;
+  `,
 ];

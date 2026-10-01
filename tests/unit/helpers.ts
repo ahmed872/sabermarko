@@ -43,3 +43,19 @@ export function addProduct(env: TestEnv, p: { name: string; price: number; cost?
     openingStock: p.qty ? { qty: p.qty * 1000, unitCost: p.cost !== undefined ? egp(p.cost) : 0, expiryDate: p.expiry ?? null } : null,
   }).id;
 }
+
+import { saveUser } from '../../src/main/services/users';
+let userSeq = 0;
+/** Create a user with a system role and return a context acting as that user. */
+export function asRole(env: TestEnv, roleCode: string, opts: { maxDiscountPct?: number | null; shift?: boolean } = {}): Ctx {
+  const role = env.ctx.db.prepare('SELECT id FROM roles WHERE code = ?').get(roleCode) as { id: number };
+  const username = `${roleCode}${++userSeq}`;
+  saveUser(env.ctx, null, { username, fullName: `مستخدم ${roleCode}`, password: '1234', roleId: role.id, maxDiscountPct: opts.maxDiscountPct ?? null });
+  const ctx: Ctx = { db: env.ctx.db, user: login(env.ctx, username, '1234'), now: env.ctx.now };
+  if (opts.shift) openShift(ctx, { openingCash: 0 });
+  return ctx;
+}
+
+export function approverCtx(env: TestEnv, ctx: Ctx): Ctx {
+  return { ...ctx, approver: env.ctx.user };
+}

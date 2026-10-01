@@ -210,7 +210,11 @@ export const expenseInput = z.object({
 
 export const promotionInput = z.object({
   name: z.string().trim().min(1).max(200),
-  type: z.enum(['percent', 'amount', 'bundle', 'bxgy']),
+  type: z.enum(['percent', 'amount', 'bundle', 'bxgy', 'cross', 'combo']),
+  rewardProductId: optId,
+  rewardQty: z.number().int().min(0).optional(),
+  rewardType: z.enum(['free', 'percent']).nullable().optional(),
+  maxPerInvoice: z.number().int().positive().nullable().optional(),
   productId: optId,
   categoryId: optId,
   minQty: posMilli.default(1000),

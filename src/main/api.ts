@@ -13,6 +13,8 @@ import * as expenses from './services/expenses';
 import * as users from './services/users';
 import * as settings from './services/settings';
 import * as reports from './services/reports';
+import * as analytics from './services/analytics';
+import * as reco from './services/recommendations';
 
 type Handler = (ctx: Ctx, p: any) => unknown | Promise<unknown>;
 export interface Route { fn: Handler; public?: boolean; licenseExempt?: boolean }
@@ -162,9 +164,26 @@ export const routes: Record<string, Route> = {
   'reports.valuation': { fn: (c) => reports.inventoryValuation(c) },
   'reports.debts': { fn: (c) => reports.debtsReport(c) },
   'reports.purchases': { fn: (c, p) => reports.purchasesReport(c, p.from, p.to) },
+  // smart retail intelligence
+  'intel.overview': { fn: (c) => analytics.intelOverview(c) },
+  'intel.products': { fn: (c, p) => analytics.classifiedProducts(c, p ?? {}) },
+  'intel.demand': { fn: (c) => analytics.demandLeaders(c) },
+  'intel.basket': { fn: (c) => analytics.basketPairs(c, p0(c)) },
+  'intel.seasonal': { fn: (c) => analytics.seasonalSignals(c) },
+  'intel.focus': { fn: (c) => reco.monthlyFocus(c) },
+  'intel.suggestions': { fn: (c, p) => reco.listSuggestions(c, p ?? {}) },
+  'intel.generate': { fn: (c) => reco.generateSuggestions(c) },
+  'intel.simulate': { fn: (c, p) => reco.simulateProposal(c, p) },
+  'intel.approve': { fn: (c, p) => reco.approveSuggestion(c, p) },
+  'intel.reject': { fn: (c, p) => reco.rejectSuggestion(c, p) },
+  'intel.mutes': { fn: (c) => reco.listMutes(c) },
+  'intel.unmute': { fn: (c, p) => reco.removeMute(c, p.id) },
+  'intel.results': { fn: (c) => reco.promotionResults(c) },
   'day.preview': { fn: (c, p) => reports.dayClosingPreview(c, p?.date) },
   'day.list': { fn: (c) => reports.listDayClosings(c) },
 };
+
+const p0 = (_c: Ctx) => ({});
 
 export function toErrorPayload(e: unknown, channel: string): AppErrorPayload {
   if (e instanceof AppError) return { code: e.code, params: e.params };

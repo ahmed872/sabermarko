@@ -49,15 +49,19 @@ export interface PricedCart {
   needsApproval: { priceOverride: boolean; largeDiscount: boolean; discount: boolean };
   customerId: number | null;
   priceListId: number | null;
+  promoHints: string[];
 }
 
-interface PromoRow { id: number; name: string; type: 'percent' | 'amount' | 'bundle' | 'bxgy'; product_id: number | null; category_id: number | null; min_qty: number; get_qty: number; value: number }
+export interface PromoRow {
+  id: number; name: string; type: 'percent' | 'amount' | 'bundle' | 'bxgy' | 'cross' | 'combo'; product_id: number | null; category_id: number | null;
+  min_qty: number; get_qty: number; value: number; reward_product_id: number | null; reward_qty: number; reward_type: 'free' | 'percent' | null; max_per_invoice: number | null;
+}
 
 function activePromotions(ctx: Ctx): PromoRow[] {
   if (!getSetting(ctx.db, 'features.promotions')) return [];
   const d = today(ctx);
   return ctx.db.prepare(
-    `SELECT id, name, type, product_id, category_id, min_qty, get_qty, value FROM promotions
+    `SELECT id, name, type, product_id, category_id, min_qty, get_qty, value, reward_product_id, reward_qty, reward_type, max_per_invoice FROM promotions
      WHERE active = 1 AND (start_date IS NULL OR start_date <= @d) AND (end_date IS NULL OR end_date >= @d)`,
   ).all({ d }) as PromoRow[];
 }
@@ -175,6 +179,7 @@ export function priceCart(ctx: Ctx, raw: CartInput): PricedCart {
     let promo: PromoRow | null = null;
     if (!overridden) {
       for (const pr of promos) {
+        if (pr.type === 'cross' || pr.type === 'combo') continue; // cart-level, applied below
         if (pr.product_id && pr.product_id !== p.id) continue;
         if (!pr.product_id && pr.category_id && pr.category_id !== p.category_id) continue;
         if (!pr.product_id && !pr.category_id) continue;
@@ -197,6 +202,8 @@ export function priceCart(ctx: Ctx, raw: CartInput): PricedCart {
     });
     taxRates.push(taxOn ? (p.tax_rate ?? storeRate) : 0);
   }
+
+  const hints = applyCrossPromotions(promos, lines);
 
   const subtotal = lines.reduce((a, l) => a + l.gross, 0);
   const promoTotal = lines.reduce((a, l) => a + l.promoDiscount, 0);
@@ -238,8 +245,61 @@ export function priceCart(ctx: Ctx, raw: CartInput): PricedCart {
   if (manualDiscountTotal > 0 && discountPct > userMax + 1e-9) needs.largeDiscount = true;
   return {
     lines, subtotal, promoDiscount: promoTotal, lineDiscount, invoiceDiscount, manualDiscountTotal, discountPct: Math.round(discountPct * 100) / 100,
-    taxTotal, rounding, total, netRevenue, itemsCount: lines.length, needsApproval: needs, customerId: cart.customerId ?? null, priceListId,
+    taxTotal, rounding, total, netRevenue, itemsCount: lines.length, needsApproval: needs, customerId: cart.customerId ?? null, priceListId, promoHints: hints,
   };
+}
+
+/**
+ * Cross-product promotions, evaluated on the whole cart:
+ *  - cross: buy `min_qty` of A -> `reward_qty` of B free (or % off), capped by max_per_invoice
+ *  - combo: `min_qty` of A + `reward_qty` of B for a fixed `value`
+ * A line keeps whichever promotion gives the customer more; discounts are
+ * allocated onto the involved lines so revenue, stock and cost stay exact.
+ * Returns hints for the cashier when a promotion is one item away.
+ */
+export function applyCrossPromotions(promos: PromoRow[], lines: PricedLine[]): string[] {
+  const hints: string[] = [];
+  const cross = promos.filter((p) => (p.type === 'cross' || p.type === 'combo') && p.product_id && p.reward_product_id && p.min_qty > 0 && p.reward_qty > 0);
+  if (!cross.length) return hints;
+  const byProduct = (pid: number) => lines.filter((l) => l.productId === pid && !l.priceOverridden);
+  const evaluated = cross.map((pr) => {
+    const aLines = byProduct(pr.product_id!);
+    const bLines = byProduct(pr.reward_product_id!);
+    const aQty = aLines.reduce((x, l) => x + l.baseQty, 0);
+    const bQty = bLines.reduce((x, l) => x + l.baseQty, 0);
+    let times = Math.min(Math.floor(aQty / pr.min_qty), Math.floor(bQty / pr.reward_qty));
+    if (pr.max_per_invoice) times = Math.min(times, pr.max_per_invoice);
+    // effective charged price per milli of base unit (gross / base milli)
+    const perMilli = (ls: PricedLine[], q: number) => (q > 0 ? ls.reduce((x, l) => x + l.gross, 0) / q : 0);
+    let discount = 0;
+    if (times > 0) {
+      const rewardValue = Math.round(perMilli(bLines, bQty) * pr.reward_qty * times);
+      if (pr.type === 'cross') discount = pr.reward_type === 'percent' ? Math.round((rewardValue * pr.value) / 10000) : rewardValue;
+      else {
+        const aValue = Math.round(perMilli(aLines, aQty) * pr.min_qty * times);
+        discount = Math.max(0, aValue + rewardValue - pr.value * times);
+      }
+    }
+    if (aQty >= pr.min_qty && bQty < pr.reward_qty && times === 0) hints.push(pr.name);
+    return { pr, aLines, bLines, discount, times };
+  }).filter((e) => e.discount > 0).sort((a, b) => b.discount - a.discount);
+  const claimed = new Set<PricedLine>();
+  for (const e of evaluated) {
+    const involved = e.pr.type === 'cross' ? e.bLines : [...e.aLines, ...e.bLines];
+    if (involved.some((l) => claimed.has(l))) continue;
+    const existing = involved.reduce((x, l) => x + l.promoDiscount, 0);
+    if (e.discount <= existing) continue; // the single-product promotion is better for the customer
+    const shares = allocate(e.discount, involved.map((l) => l.gross));
+    involved.forEach((l, i) => {
+      l.promoDiscount = Math.min(l.gross, shares[i]);
+      l.promotionId = e.pr.id;
+      l.promotionName = e.pr.name;
+      // a manual discount can never push the line below zero
+      l.discount = Math.min(l.discount, l.gross - l.promoDiscount);
+      claimed.add(l);
+    });
+  }
+  return hints;
 }
 
 /** Which approvals are still missing for the current user (and approver). */
@@ -256,8 +316,9 @@ export function missingApprovals(ctx: Ctx, priced: PricedCart): string[] {
 
 export function listPromotions(ctx: Ctx) {
   return ctx.db.prepare(
-    `SELECT pr.*, p.name AS product_name, c.name AS category_name FROM promotions pr
-     LEFT JOIN products p ON p.id = pr.product_id LEFT JOIN categories c ON c.id = pr.category_id ORDER BY pr.active DESC, pr.id DESC`,
+    `SELECT pr.*, p.name AS product_name, c.name AS category_name, rp.name AS reward_product_name FROM promotions pr
+     LEFT JOIN products p ON p.id = pr.product_id LEFT JOIN categories c ON c.id = pr.category_id LEFT JOIN products rp ON rp.id = pr.reward_product_id
+     ORDER BY pr.active DESC, pr.id DESC`,
   ).all();
 }
 
@@ -265,19 +326,23 @@ export function savePromotion(ctx: Ctx, id: number | null, raw: PromotionInput) 
   requirePerm(ctx, 'products.edit_price');
   const p = promotionInput.parse(raw);
   if (!p.productId && !p.categoryId) throw new AppError('VALIDATION', { detail: 'اختر منتجًا أو تصنيفًا للعرض' });
+  if ((p.type === 'cross' || p.type === 'combo') && (!p.productId || !p.rewardProductId || !p.rewardQty)) throw new AppError('VALIDATION', { detail: 'العرض المرتبط يحتاج المنتج الأساسي والمنتج الثاني والكمية' });
   if (p.type === 'percent' && p.value > 10000) throw new AppError('VALIDATION', { detail: 'نسبة الخصم لا تتجاوز 100%' });
   if (p.type === 'bxgy' && p.getQty <= 0) throw new AppError('VALIDATION', { detail: 'حدد كمية الهدية' });
   if (p.startDate && p.endDate && p.endDate < p.startDate) throw new AppError('VALIDATION', { detail: 'تاريخ النهاية قبل تاريخ البداية' });
   const params = {
     name: p.name, type: p.type, pid: p.productId ?? null, cid: p.productId ? null : p.categoryId ?? null, min: p.minQty, get: p.getQty,
     value: p.value, sd: p.startDate ?? null, ed: p.endDate ?? null, active: p.active ? 1 : 0, now: ts(ctx),
+    rp: p.rewardProductId ?? null, rq: p.rewardQty ?? 0, rt: p.type === 'cross' ? p.rewardType ?? 'free' : null, mpi: p.maxPerInvoice ?? null, uid: ctx.user?.id ?? null,
   };
   if (id) {
-    ctx.db.prepare(`UPDATE promotions SET name=@name, type=@type, product_id=@pid, category_id=@cid, min_qty=@min, get_qty=@get, value=@value, start_date=@sd, end_date=@ed, active=@active WHERE id=@id`).run({ ...params, id });
+    ctx.db.prepare(`UPDATE promotions SET name=@name, type=@type, product_id=@pid, category_id=@cid, min_qty=@min, get_qty=@get, value=@value, start_date=@sd, end_date=@ed, active=@active,
+      reward_product_id=@rp, reward_qty=@rq, reward_type=@rt, max_per_invoice=@mpi WHERE id=@id`).run({ ...params, id });
     audit(ctx, 'promotion.update', 'promotion', id, undefined, p);
     return { id };
   }
-  const info = ctx.db.prepare(`INSERT INTO promotions(name, type, product_id, category_id, min_qty, get_qty, value, start_date, end_date, active, created_at) VALUES (@name, @type, @pid, @cid, @min, @get, @value, @sd, @ed, @active, @now)`).run(params);
+  const info = ctx.db.prepare(`INSERT INTO promotions(name, type, product_id, category_id, min_qty, get_qty, value, start_date, end_date, active, created_at,
+    reward_product_id, reward_qty, reward_type, max_per_invoice, created_by) VALUES (@name, @type, @pid, @cid, @min, @get, @value, @sd, @ed, @active, @now, @rp, @rq, @rt, @mpi, @uid)`).run(params);
   audit(ctx, 'promotion.create', 'promotion', Number(info.lastInsertRowid), undefined, p);
   return { id: Number(info.lastInsertRowid) };
 }

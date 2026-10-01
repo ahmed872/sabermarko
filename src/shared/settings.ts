@@ -48,6 +48,18 @@ export interface StoreSettings {
   'backup.directory': string;
   'backup.lastAt': string;
   'shift.maxHours': number;
+  /** smart retail intelligence thresholds (all adjustable) */
+  'intel.windowDays': number;
+  'intel.minAgeDays': number;
+  'intel.hotPercentile': number;
+  'intel.slowPercentile': number;
+  'intel.excessCoverDays': number;
+  'intel.deadMultiplier': number;
+  'intel.minMarginPct': number;
+  'intel.maxDiscountPct': number;
+  'intel.basketMinInvoices': number;
+  'intel.basketMinPair': number;
+  'intel.maxSuggestions': number;
   'onboarding.done': boolean;
 }
 
@@ -100,6 +112,17 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   'backup.directory': '',
   'backup.lastAt': '',
   'shift.maxHours': 14,
+  'intel.windowDays': 30,
+  'intel.minAgeDays': 14,
+  'intel.hotPercentile': 80,
+  'intel.slowPercentile': 25,
+  'intel.excessCoverDays': 60,
+  'intel.deadMultiplier': 3,
+  'intel.minMarginPct': 8,
+  'intel.maxDiscountPct': 30,
+  'intel.basketMinInvoices': 30,
+  'intel.basketMinPair': 5,
+  'intel.maxSuggestions': 5,
   'onboarding.done': false,
 };
 
