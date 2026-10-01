@@ -1,0 +1,58 @@
+# Continuous integration: every push and pull request.
+# Uses no secrets at all.
+name: CI
+on:
+  push:
+    branches: ['**']
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Typecheck, unit tests, E2E (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Secret scan (no private keys / passwords in the repository)
+        run: npm run scan:secrets
+      - run: npm run typecheck
+      - run: npm run typecheck:sim
+      - run: npm test
+      - run: npm run build
+      - name: End-to-end tests (real Electron app under Xvfb)
+        run: xvfb-run -a npx playwright test
+      - name: Short store simulation + independent verification
+        run: |
+          npm run sim:build
+          node dist/sim/simulate.js --out sim-output --days 40 --products 300 --invoices 60
+          node dist/sim/verify.js --out sim-output
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failures
+          path: test-results/
+          retention-days: 7
+
+  windows:
+    name: Typecheck and unit tests (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test

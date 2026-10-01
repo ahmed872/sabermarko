@@ -40,6 +40,10 @@ export interface Simulation {
 }
 
 const VERDICT_TEXT = { good: 'فرصة جيدة لتصريف المخزون', ok: 'مناسب لتحريك المنتج', review: 'يحتاج مراجعة بسبب انخفاض هامش الربح' } as const;
+/** Below this cost value (minor units) an expiring quantity is not worth an offer — the expiry alert covers it. */
+const MIN_EXPIRY_VALUE = 2000;
+/** Ranking penalty so offers that need review never crowd out safe ones. */
+const REVIEW_PENALTY = 25;
 
 function cur(ctx: Ctx) {
   return { code: getSetting(ctx.db, 'currency.code'), symbol: getSetting(ctx.db, 'currency.symbol'), digits: getSetting(ctx.db, 'ui.digits') };
@@ -171,15 +175,30 @@ export function buildSuggestions(ctx: Ctx): Built[] {
     /* ---------------- expiry: discount to sell before it expires */
     if (isExpiry) {
       const e = a.expiry!;
-      const pct = e.daysLeft <= 7 ? 30 : e.daysLeft <= 14 ? 20 : e.daysLeft <= 30 ? 15 : 10;
-      const proposal: Proposal = { type: 'percent', productId: a.id, minQty: a.allowDecimal ? 1 : 1000, value: pct * 100, days: Math.max(3, Math.min(e.daysLeft, 21)), name: `تصريف قبل الصلاحية — ${a.name}` };
-      const sim = simulate(ctx, proposal, metrics, e.atRiskQty);
       const lossIfExpired = Math.round((e.atRiskQty * a.avgCost) / 1000);
+      // too small to be worth an offer (e.g. one loaf of bread): the expiry alert is enough
+      if (lossIfExpired < MIN_EXPIRY_VALUE) continue;
+      // the offer must end before the goods expire (never run an offer on expired stock)
+      const days = Math.max(1, Math.min(e.daysLeft, 21));
+      const maxPct = e.daysLeft <= 7 ? 30 : e.daysLeft <= 14 ? 20 : e.daysLeft <= 30 ? 15 : 10;
+      // prefer the deepest discount that still sells above cost; only if none exists, propose the
+      // urgency discount and mark it for review (a smaller loss than throwing the goods away)
+      let pick: { proposal: Proposal; sim: Simulation } | null = null;
+      let urgent: { proposal: Proposal; sim: Simulation } | null = null;
+      for (const pct of [30, 20, 15, 10, 5].filter((x) => x <= maxPct)) {
+        const proposal: Proposal = { type: 'percent', productId: a.id, minQty: a.allowDecimal ? 1 : 1000, value: pct * 100, days, name: `تصريف قبل الصلاحية — ${a.name}` };
+        const sim = simulate(ctx, proposal, metrics, e.atRiskQty);
+        if (!urgent) urgent = { proposal, sim };
+        if (!sim.unsafe) { pick = { proposal, sim }; break; }
+      }
+      const { proposal, sim } = pick ?? urgent!;
       const reasons = [...a.reasons, `قيمة الكمية المعرضة للتلف بالتكلفة: ${money(lossIfExpired)}.`];
       if (sim.flags.belowCost || sim.flags.loss) reasons.push(`البيع بالخصم أقل من التكلفة، لكن الخسارة المتوقعة (${money(Math.max(0, -sim.projectedProfit))}) أقل من خسارة التلف الكامل (${money(lossIfExpired)}).`);
+      else if (pick && proposal.value / 100 < maxPct) reasons.push(`تم اختيار خصم ${proposal.value / 100}% لأنه أكبر خصم يظل فوق التكلفة.`);
       built.push({
         kind: 'expiry', productId: a.id, partnerId: null, verdict: sim.unsafe ? 'review' : 'good',
-        score: 60 + 30 * (1 - Math.min(Math.max(e.daysLeft, 0), 60) / 60) + 10 * (lossIfExpired / maxStockValue),
+        // loss-making offers rank below safe ones; urgency and value at risk order the rest
+        score: 60 + 30 * (1 - Math.min(Math.max(e.daysLeft, 0), 60) / 60) + 10 * (lossIfExpired / maxStockValue) - (sim.unsafe ? REVIEW_PENALTY : 0),
         payload: { title: titleOf(proposal, a.name), proposal, simulation: sim, reasons, goal: `بيع ${q(e.atRiskQty)} ${a.unitSymbol} قبل ${arDate(e.nearestDate)} بدل خسارتها.`, verdictText: sim.unsafe ? VERDICT_TEXT.review : VERDICT_TEXT.good, rejected: [], history: historyLine('expiry') },
       });
       continue;
@@ -322,7 +341,22 @@ export function listSuggestions(ctx: Ctx, opts: { status?: string; all?: boolean
   ).all({ p: period(ctx), st: opts.status ?? null }) as any[];
   const max = getSetting(ctx.db, 'intel.maxSuggestions');
   const items = rows.map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
-  return { items: opts.all ? items : items.slice(0, Math.max(max, items.filter((i) => i.status !== 'new').length + max)), total: items.length, limited: false };
+  if (opts.all) return { items, total: items.length, limited: false };
+  // The short list must not be monopolised by one kind (a dairy-heavy store would otherwise only
+  // ever see expiry offers and never its dead stock): each kind gets at most half of the new slots.
+  const decided = items.filter((i) => i.status !== 'new');
+  const fresh = items.filter((i) => i.status === 'new');
+  const cap = Math.max(1, Math.ceil(max / 2));
+  const perKind = new Map<string, number>();
+  const shown: any[] = [];
+  for (const it of fresh) {
+    if (shown.length >= max) break;
+    if ((perKind.get(it.kind) ?? 0) >= cap) continue;
+    perKind.set(it.kind, (perKind.get(it.kind) ?? 0) + 1);
+    shown.push(it);
+  }
+  for (const it of fresh) { if (shown.length >= max) break; if (!shown.includes(it)) shown.push(it); }
+  return { items: [...shown, ...decided], total: items.length, limited: false };
 }
 
 /** Re-simulate an edited proposal (owner adjusting the offer before approval). */

@@ -30,7 +30,8 @@ export interface ProductMetrics {
   daysCover: number | null; // null when nothing sells (infinite cover)
   turnover: number | null; // annualised COGS / stock value
   lastSale: string | null; daysSinceLast: number | null; longGap: number | null; // typical days between sales (180d)
-  expiry: { batchQty: number; nearestDate: string; daysLeft: number; atRiskQty: number } | null;
+  /** expiredQty: already past its date — must be disposed, never discounted. atRiskQty: still sellable but will not sell in time. */
+  expiry: { batchQty: number; nearestDate: string; daysLeft: number; atRiskQty: number; expiredQty: number } | null;
   classes: ProductClass[];
   primary: ProductClass;
   reasons: string[];
@@ -132,10 +133,13 @@ export function productMetrics(ctx: Ctx, opts: { windowDays?: number; asOf?: str
     let expiry: ProductMetrics['expiry'] = null;
     const bs = batchesBy.get(r.id);
     if (bs?.length) {
-      // quantity that will NOT sell before each batch expires, at the current pace (FEFO order)
+      // quantity that will NOT sell before each batch expires, at the current pace (FEFO order).
+      // Batches already past their date are counted separately: they are for disposal, not for an offer.
+      const expiredQty = bs.filter((b) => b.expiry_date < to).reduce((a, b) => a + b.qty, 0);
+      const sellable = bs.filter((b) => b.expiry_date >= to);
       let sellableBefore = 0;
       let atRisk = 0;
-      for (const b of bs) {
+      for (const b of sellable) {
         const daysLeft = Math.max(0, daysBetween(to, b.expiry_date));
         const capacity = Math.max(0, velocity * daysLeft - sellableBefore);
         const sells = Math.min(b.qty, capacity);
@@ -144,7 +148,8 @@ export function productMetrics(ctx: Ctx, opts: { windowDays?: number; asOf?: str
       }
       // count products are rounded to whole units (no '97.4 pieces')
       const risk = r.allow_decimal ? Math.round(atRisk) : Math.round(atRisk / 1000) * 1000;
-      expiry = { batchQty: bs.reduce((a, b) => a + b.qty, 0), nearestDate: bs[0].expiry_date, daysLeft: daysBetween(to, bs[0].expiry_date), atRiskQty: risk };
+      const nearest = sellable[0] ?? bs[0];
+      expiry = { batchQty: bs.reduce((a, b) => a + b.qty, 0), nearestDate: nearest.expiry_date, daysLeft: daysBetween(to, nearest.expiry_date), atRiskQty: risk, expiredQty };
     }
     return {
       id: r.id, name: r.variant_name ? `${r.name} ${r.variant_name}` : r.name, categoryId: r.category_id, category: r.category, unitSymbol: r.unit_symbol, allowDecimal: !!r.allow_decimal,
@@ -174,11 +179,14 @@ export function productMetrics(ctx: Ctx, opts: { windowDays?: number; asOf?: str
     const reasons: string[] = [];
     const u = m.unitSymbol;
     const isNew = m.ageDays < minAge;
-    if (m.expiry && (m.expiry.atRiskQty > 0 || m.expiry.daysLeft < 0)) {
+    if (m.expiry && (m.expiry.atRiskQty > 0 || m.expiry.expiredQty > 0)) {
       c.push('expiry');
-      reasons.push(m.expiry.daysLeft < 0
-        ? `توجد كمية منتهية الصلاحية منذ ${-m.expiry.daysLeft} يوم.`
-        : `أقرب صلاحية بعد ${m.expiry.daysLeft} يوم، وبمعدل البيع الحالي ستتبقى حوالي ${fmtQ(m.expiry.atRiskQty)} ${u} بدون بيع.`);
+      if (m.expiry.expiredQty > 0) reasons.push(`توجد ${fmtQ(m.expiry.expiredQty)} ${u} منتهية الصلاحية — يجب رفعها من الرف وتسجيلها كتالف، ولا تُباع.`);
+      if (m.expiry.atRiskQty > 0) {
+        reasons.push(m.expiry.daysLeft === 0
+          ? `صلاحية جزء من الكمية تنتهي اليوم، وبمعدل البيع الحالي ستتبقى حوالي ${fmtQ(m.expiry.atRiskQty)} ${u} بدون بيع.`
+          : `أقرب صلاحية بعد ${m.expiry.daysLeft} يوم، وبمعدل البيع الحالي ستتبقى حوالي ${fmtQ(m.expiry.atRiskQty)} ${u} بدون بيع.`);
+      }
     }
     if (!isNew && m.stock > 0) {
       const threshold = m.longGap ? Math.max(deadDays, Math.ceil(deadMult * m.longGap)) : deadDays;

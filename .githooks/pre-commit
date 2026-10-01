@@ -1,0 +1,3 @@
+#!/bin/sh
+# Refuse commits that contain a private key, certificate or password (see tools/release/scan-secrets.mjs).
+exec node tools/release/scan-secrets.mjs --staged

@@ -18,7 +18,16 @@
     "dist:linux": "npm run build && electron-builder --linux deb AppImage",
     "dist:win": "npm run build && electron-builder --win nsis",
     "license:keygen": "node tools/license/keygen.mjs",
-    "license:issue": "node tools/license/issue.mjs"
+    "license:issue": "node tools/license/issue.mjs",
+    "typecheck:sim": "tsc -p tsconfig.sim.json --noEmit",
+    "sim:build": "node scripts/build-main.mjs --sim",
+    "sim:run": "node dist/sim/simulate.js --out sim-output",
+    "sim:verify": "node dist/sim/verify.js --out sim-output",
+    "sim:restore": "node dist/sim/restore-tests.js --out sim-output",
+    "license:verify": "node tools/license/verify.mjs",
+    "scan:secrets": "node tools/release/scan-secrets.mjs",
+    "release:check": "node tools/release/check-release.mjs",
+    "prepare": "node tools/release/install-hooks.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3"

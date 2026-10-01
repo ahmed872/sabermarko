@@ -20,4 +20,8 @@ const entries = [
 if (process.env.BUILD_SAMPLE) entries.push({ entryPoints: ['scripts/sample-invoice.ts'], outfile: 'dist/sample/sample-invoice.js' });
 if (process.env.BUILD_TOOLS) entries.push({ entryPoints: ['scripts/seed-demo.ts'], outfile: 'dist/tools/seed-demo.js', external: ['better-sqlite3'] });
 
+if (process.env.BUILD_SIM || process.argv.includes('--sim')) {
+  // one-year simulation tools: test-only, written to dist/sim (excluded from every installer)
+  for (const n of ['simulate', 'verify', 'restore-tests']) entries.push({ entryPoints: [`scripts/sim/${n}.ts`], outfile: `dist/sim/${n}.js`, external: ['better-sqlite3'] });
+}
 for (const e of entries) await build({ ...common, ...e, ...(watch ? {} : {}) });

@@ -1,0 +1,92 @@
+# Release: push a tag "vX.Y.Z" (matching package.json) to build the Windows installer on a real
+# Windows runner, run the tests, compute SHA256 and publish a GitHub Release.
+#
+# NO private key, password, certificate or other secret is used or uploaded here. The installer is
+# NOT code-signed (there is no code-signing certificate); publishing on GitHub does not sign it.
+# A manual run (workflow_dispatch) builds the installer as a downloadable artifact without publishing.
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    name: Build Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'   # never look for a signing certificate
+      # manual (non-tag) builds are never published, so they may use the development license key
+      ALLOW_DEV_LICENSE_KEY: ${{ github.ref_type == 'tag' && '0' || '1' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Release gate (version / changelog / production license key / secret scan)
+        run: node tools/release/check-release.mjs
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Build NSIS installer (unsigned)
+        run: npx electron-builder --win nsis --publish never
+      - name: SHA256 checksum
+        shell: pwsh
+        run: |
+          $f = Get-ChildItem release -Filter 'SaberMarko-POS-Setup-*.exe' | Select-Object -First 1
+          if (-not $f) { throw 'installer not found' }
+          $h = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower()
+          "$h  $($f.Name)" | Out-File -Encoding ascii -NoNewline release/SHA256SUMS.txt
+          Get-Content release/SHA256SUMS.txt
+      - name: Smoke-test the installer (silent install, files present, silent uninstall)
+        shell: pwsh
+        run: |
+          $f = (Get-ChildItem release -Filter 'SaberMarko-POS-Setup-*.exe' | Select-Object -First 1).FullName
+          $p = Start-Process $f -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exit code $($p.ExitCode)" }
+          $exe = Join-Path $env:LOCALAPPDATA 'Programs\SaberMarko POS\SaberMarko POS.exe'
+          if (-not (Test-Path $exe)) { throw "installed exe not found at $exe" }
+          $u = Join-Path $env:LOCALAPPDATA 'Programs\SaberMarko POS\Uninstall SaberMarko POS.exe'
+          Start-Process $u -ArgumentList '/S' -Wait
+          Start-Sleep -Seconds 5
+          if (Test-Path $exe) { throw 'uninstall left the program behind' }
+          Write-Host 'installer smoke test passed (this is NOT a runtime test of the app UI)'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            release/SaberMarko-POS-Setup-*.exe
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: Publish GitHub Release
+    needs: windows-installer
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: out
+      - name: Re-verify checksum after transfer
+        run: cd out && sha256sum -c SHA256SUMS.txt
+      - name: Release notes
+        run: |
+          if [ -f "docs/release-notes/${GITHUB_REF_NAME}.md" ]; then cp "docs/release-notes/${GITHUB_REF_NAME}.md" notes.md
+          else awk -v v="## [${GITHUB_REF_NAME#v}]" 'index($0,v)==1{p=1;print;next} /^## \[/{p=0} p' CHANGELOG.md > notes.md; fi
+          printf '\n\n**SHA256**\n```\n%s\n```\n' "$(cat out/SHA256SUMS.txt)" >> notes.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: SaberMarko POS ${{ github.ref_name }}
+          body_path: notes.md
+          files: out/*
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true

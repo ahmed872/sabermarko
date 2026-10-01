@@ -12,6 +12,7 @@ files:
   - "!**/*.map"
   - "!dist/sample/**"
   - "!dist/tools/**"
+  - "!dist/sim/**"
 asar: true
 asarUnpack:
   - node_modules/better-sqlite3/**

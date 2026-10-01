@@ -192,6 +192,54 @@ describe('promotion engine safety and profitability', () => {
     expect(s.kind).toBe('expiry');
     expect(s.payload.proposal.value).toBe(30 * 100); // <= 7 days left -> 30%
     expect(s.payload.reasons.join(' ')).toContain('المعرضة للتلف');
+    expect(s.payload.proposal.days).toBeLessThanOrEqual(yy.expiry!.daysLeft); // the offer ends before the goods expire
+  });
+
+  it('low-margin dairy close to expiry gets the deepest discount that still sells above cost, not a blanket 30%', () => {
+    const env = setupStore({ settings: { 'features.expiry': true } });
+    env.clock.t = new Date(2026, 8, 1, 10);
+    const piece = env.unit('قطعة');
+    const y = createProduct(env.ctx, { name: 'زبادي هامش قليل', baseUnitId: piece, sellPrice: egp(10), trackExpiry: true }).id;
+    const others = [1, 2, 3, 4, 5].map((i) => addProduct(env, { name: `صنف ${i}`, price: 5, cost: 3, qty: 500 }));
+    createPurchase(env.ctx, { lines: [{ productId: y, unitId: piece, qty: 60_000, unitCost: egp(8.5), expiryDate: '2026-09-25' }], paid: egp(510) });
+    simulateDays(env, 20, (d) => [[[y, 1], [others[d % 5], 2]], [[others[(d + 1) % 5], 3]]]);
+    const s = buildSuggestions(env.ctx).find((x) => x.productId === y)!;
+    expect(s.kind).toBe('expiry');
+    expect(s.verdict).toBe('good');
+    expect(s.payload.proposal.value).toBe(5 * 100); // 15% margin: 5% keeps the price above cost (10% would not)
+    expect(s.payload.simulation.flags.belowCost).toBe(false);
+  });
+
+  it('the short list shown to the owner mixes kinds (one kind never takes every slot)', () => {
+    const env = setupStore();
+    const ids = [1, 2, 3, 4, 5, 6, 7, 8].map((i) => addProduct(env, { name: `صنف ${i}`, price: 10, cost: 6, qty: 10 }));
+    const per = '2026-10';
+    const ins = env.ctx.db.prepare(`INSERT INTO promotion_suggestions(period, kind, status, product_id, score, verdict, payload, generated_at) VALUES (?, ?, 'new', ?, ?, 'good', '{}', '2026-10-01 10:00:00')`);
+    ids.slice(0, 6).forEach((id, i) => ins.run(per, 'expiry', id, 95 - i));
+    ins.run(per, 'clearance', ids[6], 50);
+    ins.run(per, 'pair', ids[7], 40);
+    env.ctx.db.prepare(`INSERT INTO app_meta(key, value) VALUES ('intel_last_gen', '2026-10-01 10:00:00') ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run();
+    const shown = (listSuggestions(env.ctx) as any).items.filter((x: any) => x.status === 'new');
+    expect(shown).toHaveLength(5);
+    expect(shown.filter((x: any) => x.kind === 'expiry')).toHaveLength(3);
+    expect(shown.map((x: any) => x.kind)).toEqual(expect.arrayContaining(['clearance', 'pair']));
+    expect((listSuggestions(env.ctx, { all: true }) as any).items).toHaveLength(8);
+  });
+
+  it('expired stock is never offered at a discount — it is flagged for disposal (found by the one-year simulation)', () => {
+    const env = setupStore({ settings: { 'features.expiry': true } });
+    env.clock.t = new Date(2026, 8, 1, 10);
+    const piece = env.unit('قطعة');
+    const y = createProduct(env.ctx, { name: 'لبن', baseUnitId: piece, sellPrice: egp(10), trackExpiry: true }).id;
+    const others = [1, 2, 3].map((i) => addProduct(env, { name: `صنف ${i}`, price: 5, cost: 3, qty: 500 }));
+    createPurchase(env.ctx, { lines: [{ productId: y, unitId: piece, qty: 30_000, unitCost: egp(6), expiryDate: '2026-09-10' }], paid: egp(180) });
+    simulateDays(env, 12, (d) => [[[y, 1], [others[d % 3], 2]]]); // now 13 Sep: ~18 units expired 3 days ago
+    const yy = productMetrics(env.ctx).find((x) => x.id === y)!;
+    expect(yy.expiry!.expiredQty).toBeGreaterThan(0);
+    expect(yy.expiry!.atRiskQty).toBe(0);
+    expect(yy.classes).toContain('expiry');
+    expect(yy.reasons.join(' ')).toContain('لا تُباع');
+    expect(buildSuggestions(env.ctx).find((x) => x.productId === y)).toBeUndefined();
   });
 });
 

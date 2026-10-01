@@ -40,6 +40,7 @@ export function RestoreFlow({ onDone, onCancel, compact }: { onDone: (result: an
           <tr><td>المشتريات</td><td className="n">{num(done.after?.purchases)}</td></tr>
           <tr><td>العملاء / الموردون</td><td className="n">{num(done.after?.customers)} / {num(done.after?.suppliers)}</td></tr>
         </tbody></table>
+        {done.safetyFile && <div className="alert info small">بياناتك السابقة محفوظة تلقائيًا كنسخة «قبل استعادة» في مجلد النسخ الاحتياطية — يمكنك الرجوع إليها إذا اخترت النسخة الخطأ.</div>}
         <button className="btn primary lg" onClick={() => onDone(done)}>متابعة لتسجيل الدخول</button>
       </div>
     );

@@ -179,11 +179,14 @@ export async function validateBackup(file: string, workDir: string): Promise<{ i
  */
 export async function restoreBackup(opts: {
   file: string; dbPath: string; workDir: string; db: DB; close: () => void; reopen: () => DB; appVersion: string; storeName: string;
+  /** where the automatic "before restore" copy is kept — the visible backup folder, so a wrong restore can be undone */
+  safetyDir?: string;
 }): Promise<{ info: BackupInfo; safetyFile: string; after: BackupCounts }> {
   const { info, dbFile } = await validateBackup(opts.file, opts.workDir);
   let safetyFile = '';
   try {
-    safetyFile = join(opts.workDir, `before-restore-${stamp()}.sbmbak`);
+    if (opts.safetyDir) mkdirSync(opts.safetyDir, { recursive: true });
+    safetyFile = join(opts.safetyDir ?? opts.workDir, `before-restore-${stamp()}.sbmbak`);
     await createBackup(opts.db, safetyFile, { appVersion: opts.appVersion, storeName: opts.storeName, reason: 'before-restore', workDir: opts.workDir });
   } catch (e) {
     try { unlinkSync(dbFile); } catch { /* ignore */ }

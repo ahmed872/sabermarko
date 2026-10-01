@@ -9,3 +9,4 @@ playwright-report/
 tools/license/private*.pem
 tools/license/*.key
 .vendor-keys/
+sim-output/

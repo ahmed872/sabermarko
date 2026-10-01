@@ -272,7 +272,7 @@ const special: Record<string, Special> = {
     const storeName = db ? getSetting(db, 'store.name') : '';
     if (db && !recoveryMode) {
       const result = await restoreBackup({
-        file, dbPath, workDir, db, appVersion: app.getVersion(), storeName,
+        file, dbPath, workDir, db, appVersion: app.getVersion(), storeName, safetyDir: backupDir(),
         close: () => { db!.close(); db = null; },
         reopen: () => { db = openDb(); return db; },
       });
