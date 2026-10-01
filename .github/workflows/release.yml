@@ -4,12 +4,18 @@
 # The only secret used is SBM_LICENSE_PRIVATE_KEY, from which just the PUBLIC license key is derived and built in;
 # no private key, password or certificate is written to the build or uploaded. The installer is
 # NOT code-signed (there is no code-signing certificate); publishing on GitHub does not sign it.
-# A manual run (workflow_dispatch) builds the installer as a downloadable artifact without publishing.
+# A manual run (workflow_dispatch) builds the installer as a downloadable artifact; with "publish" checked it also
+# publishes the GitHub Release v<package.json version> (same checks as a tag, production key required).
 name: Release
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'نشر GitHub Release رسمي (vX.Y.Z من package.json) — يتطلب السر SBM_LICENSE_PRIVATE_KEY'
+        type: boolean
+        default: false
 permissions:
   contents: write
 
@@ -20,8 +26,8 @@ jobs:
     timeout-minutes: 40
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'   # never look for a signing certificate
-      # manual (non-tag) builds are never published, so they may use the development license key
-      ALLOW_DEV_LICENSE_KEY: ${{ github.ref_type == 'tag' && '0' || '1' }}
+      # a test build (manual, publish unchecked) is never published, so it may use the development license key
+      ALLOW_DEV_LICENSE_KEY: ${{ (github.ref_type == 'tag' || inputs.publish) && '0' || '1' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -35,7 +41,7 @@ jobs:
         shell: bash
         env:
           SBM_LICENSE_PRIVATE_KEY: ${{ secrets.SBM_LICENSE_PRIVATE_KEY }}
-        run: node tools/license/use-secret-key.mjs ${{ github.ref_type == 'tag' && ' ' || '--optional' }}
+        run: node tools/license/use-secret-key.mjs ${{ (github.ref_type == 'tag' || inputs.publish) && ' ' || '--optional' }}
       - name: Release gate (version / changelog / production license key / secret scan)
         run: node tools/release/check-release.mjs
       - run: npm run typecheck
@@ -127,10 +133,14 @@ jobs:
   publish:
     name: Publish GitHub Release
     needs: windows-installer
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || inputs.publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Release tag
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+          else echo "TAG=v$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"; fi
       - uses: actions/download-artifact@v4
         with:
           name: windows-installer
@@ -139,13 +149,15 @@ jobs:
         run: cd out && sha256sum -c SHA256SUMS.txt
       - name: Release notes
         run: |
-          if [ -f "docs/release-notes/${GITHUB_REF_NAME}.md" ]; then cp "docs/release-notes/${GITHUB_REF_NAME}.md" notes.md
-          else awk -v v="## [${GITHUB_REF_NAME#v}]" 'index($0,v)==1{p=1;print;next} /^## \[/{p=0} p' CHANGELOG.md > notes.md; fi
+          if [ -f "docs/release-notes/${TAG}.md" ]; then cp "docs/release-notes/${TAG}.md" notes.md
+          else awk -v v="## [${TAG#v}]" 'index($0,v)==1{p=1;print;next} /^## \[/{p=0} p' CHANGELOG.md > notes.md; fi
           printf '\n\n**SHA256**\n```\n%s\n```\n' "$(cat out/SHA256SUMS.txt)" >> notes.md
       - uses: softprops/action-gh-release@v2
         with:
-          name: SaberMarko POS ${{ github.ref_name }}
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: SaberMarko POS ${{ env.TAG }}
           body_path: notes.md
           files: out/*
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(env.TAG, '-') }}
           fail_on_unmatched_files: true
