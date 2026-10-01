@@ -1,10 +1,11 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  BarChart3, Boxes, ClipboardList, Coins, FileText, Home, KeyRound, LogOut, Package, Receipt, RotateCcw, Settings, ShoppingCart,
+  BarChart3, Boxes, ClipboardList, Coins, FileText, Home, KeyRound, Lock, LogOut, Package, Receipt, RotateCcw, Settings, ShoppingCart,
   Sparkles, Truck, UserCog, Users, Wallet, DatabaseBackup, ScrollText, CalendarCheck, PackageSearch, Timer,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { Field, Modal, useAction } from './ui';
 import { useApp } from '../lib/app';
 import { api } from '../lib/api';
 import { money } from '../lib/format';
@@ -16,6 +17,7 @@ interface NavItem { to: string; label: string; icon: ReactNode; perm?: Permissio
 export function Layout() {
   const { user, settings, can, feature, logout, boot } = useApp();
   const loc = useLocation();
+  const [pwOpen, setPwOpen] = useState(false);
   const alerts = useQuery({ queryKey: ['alerts'], queryFn: () => api<any[]>('reports.alerts'), refetchInterval: 120_000, enabled: !!user });
   const shift = useQuery({ queryKey: ['shift'], queryFn: () => api('shifts.current'), enabled: can('pos.sell'), refetchInterval: 60_000 });
   const lowCount = alerts.data?.find((a) => a.key === 'low')?.count;
@@ -84,6 +86,7 @@ export function Layout() {
           <div className="grow">
             {shift.data ? <span>وردية مفتوحة — {money(shift.data.expected)}</span> : can('pos.sell') ? <span>لا توجد وردية مفتوحة</span> : null}
           </div>
+          <button className="btn ghost sm icon" title="تغيير كلمة المرور" style={{ color: 'inherit' }} onClick={() => setPwOpen(true)}><Lock size={16} /></button>
           <button className="btn ghost sm icon" title="تسجيل الخروج" style={{ color: 'inherit' }} onClick={() => void logout()}><LogOut size={16} /></button>
         </div>
       </aside>
@@ -98,6 +101,23 @@ export function Layout() {
           <Outlet />
         </div>
       </div>
+      {pwOpen && <ChangePasswordDialog onClose={() => setPwOpen(false)} />}
     </div>
+  );
+}
+
+function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
+  const { run, busy } = useAction();
+  const [f, setF] = useState({ current: '', next: '', confirm: '' });
+  const mismatch = f.confirm.length > 0 && f.next !== f.confirm;
+  const valid = f.current && f.next.length >= 4 && f.next === f.confirm;
+  return (
+    <Modal title="تغيير كلمة المرور" onClose={onClose} footer={<button className="btn primary" disabled={busy || !valid} onClick={() => run(async () => { await api('auth.changePassword', { current: f.current, next: f.next }); onClose(); }, 'تم تغيير كلمة المرور')}>حفظ</button>}>
+      <div className="col">
+        <Field label="كلمة المرور الحالية"><input className="input" type="password" autoFocus value={f.current} onChange={(e) => setF({ ...f, current: e.target.value })} /></Field>
+        <Field label="كلمة المرور الجديدة" help="4 أحرف على الأقل"><input className="input" type="password" value={f.next} onChange={(e) => setF({ ...f, next: e.target.value })} /></Field>
+        <Field label="تأكيد كلمة المرور الجديدة" error={mismatch ? 'كلمتا المرور غير متطابقتين' : undefined}><input className="input" type="password" value={f.confirm} onChange={(e) => setF({ ...f, confirm: e.target.value })} /></Field>
+      </div>
+    </Modal>
   );
 }

@@ -245,7 +245,7 @@ export function expiringBatches(ctx: Ctx, days?: number) {
   const d = days ?? getSetting(ctx.db, 'inventory.expiryAlertDays');
   const limit = addDays(today(ctx), d);
   return ctx.db.prepare(
-    `SELECT b.id, b.batch_no, b.expiry_date, b.qty, b.unit_cost, p.id AS product_id, p.name, p.variant_name, u.symbol AS unit_symbol, l.name AS location_name,
+    `SELECT b.id, b.batch_no, b.expiry_date, b.qty, ${can(ctx, 'reports.cost') ? 'b.unit_cost' : 'NULL AS unit_cost'}, p.id AS product_id, p.name, p.variant_name, u.symbol AS unit_symbol, l.name AS location_name,
             CAST(julianday(b.expiry_date) - julianday(@today) AS INTEGER) AS days_left
      FROM batches b JOIN products p ON p.id = b.product_id JOIN units u ON u.id = p.base_unit_id JOIN locations l ON l.id = b.location_id
      WHERE b.qty > 0 AND b.expiry_date IS NOT NULL AND b.expiry_date <= @limit ORDER BY b.expiry_date LIMIT 1000`,
@@ -324,11 +324,14 @@ export function alerts(ctx: Ctx) {
   const now = ctx.now().getTime();
   const longShifts = openShifts(ctx).filter((s) => (now - Date.parse(s.opened_at)) / 3_600_000 > maxH && (s.user_id === ctx.user?.id || can(ctx, 'shifts.view_all')));
   if (longShifts.length) out.push({ key: 'shift_long', level: 'warning', count: longShifts.length, text: `وردية مفتوحة منذ أكثر من ${maxH} ساعة (${longShifts.map((s) => s.user_name).join('، ')})`, link: '/shifts' });
-  if (can(ctx, 'backup.manage') && getSetting(db, 'backup.auto')) {
-    const last = getSetting(db, 'backup.lastAt');
-    const hours = last ? (now - Date.parse(last)) / 3_600_000 : Infinity;
-    if (hours > Math.max(getSetting(db, 'backup.frequencyHours'), 24) * 2) out.push({ key: 'backup', level: 'warning', text: last ? 'آخر نسخة احتياطية قديمة — يُنصح بعمل نسخة الآن' : 'لم يتم عمل نسخة احتياطية بعد', link: '/backup' });
+  if (can(ctx, 'backup.manage')) {
+    // gentle reminder: once a week without any backup (auto or manual). Counted from the
+    // last backup, or from the day the store was set up when no backup exists yet.
+    const last = getSetting(db, 'backup.lastAt') || (db.prepare('SELECT MIN(created_at) AS t FROM users').get() as { t: string | null }).t;
+    const days = last ? Math.floor((now - Date.parse(last)) / 86_400_000) : 0;
+    if (days >= 7) out.push({ key: 'backup', level: 'warning', count: days, text: `⚠️ لم يتم إنشاء نسخة احتياطية منذ ${days} أيام`, link: '/backup' });
   }
+
   if (canInv) {
     const dd = getSetting(db, 'inventory.deadStockDays');
     const since = addDays(today(ctx), -dd);

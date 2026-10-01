@@ -63,13 +63,14 @@ const REG_KEY = 'HKCU\\Software\\SaberMarkoPOS';
  * survives uninstall (registry on Windows, hidden file in the home folder
  * elsewhere), and the database itself.
  */
-export function createNodeLicenseStorage(userDataDir: string, getDb: () => DB | null, appId: string): LicenseStorage {
+export function createNodeLicenseStorage(userDataDir: string, getDb: () => DB | null, appId: string, mirrorDirOverride?: string | null): LicenseStorage {
   const primary = join(userDataDir, 'license.dat');
   const tag = createHash('sha256').update(appId).digest('hex').slice(0, 10);
-  const homeMirror = join(homedir(), process.platform === 'darwin' ? 'Library/Application Support' : '.local/share', `.sbm-${tag}`);
+  const homeMirror = join(mirrorDirOverride ?? join(homedir(), process.platform === 'darwin' ? 'Library/Application Support' : '.local/share'), `.sbm-${tag}`);
+  const useRegistry = process.platform === 'win32' && !mirrorDirOverride;
   const readFile = (f: string) => { try { return existsSync(f) ? readFileSync(f, 'utf8') : null; } catch { return null; } };
   const readMirror = (): string | null => {
-    if (process.platform === 'win32') {
+    if (useRegistry) {
       try {
         const out = execFileSync('reg', ['query', REG_KEY, '/v', 'ls'], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
         const m = out.match(/ls\s+REG_SZ\s+(\S+)/);
@@ -79,7 +80,7 @@ export function createNodeLicenseStorage(userDataDir: string, getDb: () => DB | 
     return readFile(homeMirror);
   };
   const writeMirror = (v: string) => {
-    if (process.platform === 'win32') {
+    if (useRegistry) {
       try { execFileSync('reg', ['add', REG_KEY, '/v', 'ls', '/t', 'REG_SZ', '/d', v, '/f'], { windowsHide: true, timeout: 5000 }); } catch { /* best effort */ }
       return;
     }

@@ -6,7 +6,7 @@ import { useApp } from '../lib/app';
 import { Field, useAction, useToast } from '../components/ui';
 import { CURRENCIES } from '../../shared/settings';
 import { initials } from '../../shared/arabic';
-import { dateTime } from '../lib/format';
+import { RestoreFlow } from '../components/RestoreFlow';
 
 export function StoreLogo({ name, logo, className = 'auth-logo' }: { name?: string; logo?: string; className?: string }) {
   return <div className={className}>{logo ? <img src={logo} alt="" /> : initials(name || 'م')}</div>;
@@ -43,6 +43,7 @@ export function SetupWizard() {
   const { run, busy } = useAction();
   const toast = useToast();
   const [step, setStep] = useState(0);
+  const [restoring, setRestoring] = useState(false);
   const [f, setF] = useState({
     storeName: '', phone: '', address: '', logo: '', currencyCode: 'EGP', currencySymbol: 'ج.م', adminName: '', adminUsername: 'admin',
     adminPassword: '', adminPassword2: '', starterCategories: true, mode: 'simple' as 'simple' | 'advanced', printType: 'thermal80' as 'thermal80' | 'thermal58' | 'a4',
@@ -59,6 +60,17 @@ export function SetupWizard() {
     setSession(res.user, res.settings);
   });
 
+  if (restoring) {
+    return (
+      <div className="auth-bg">
+        <div className="auth-card wide">
+          <h1>استعادة بيانات محل موجود</h1>
+          <p className="muted small">مناسب عند تغيير الكمبيوتر أو إعادة تثبيت البرنامج: اختر آخر نسخة احتياطية لمحلك وسيعود كل شيء كما كان (المنتجات، الفواتير، المخزون، العملاء، الموردون، المستخدمون).</p>
+          <RestoreFlow onDone={() => void refresh()} onCancel={() => setRestoring(false)} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="auth-bg">
       <div className="auth-card wide">
@@ -69,6 +81,7 @@ export function SetupWizard() {
             <h1>أهلًا بك</h1>
             <p className="muted">خلال دقيقة واحدة سنجهز البرنامج باسم محلك. كل الخطوات بسيطة ويمكن تعديلها لاحقًا من الإعدادات.</p>
             <div className="alert info" style={{ textAlign: 'right' }}>تبدأ الآن فترة تجريبية كاملة لمدة 20 يومًا. البرنامج يعمل بدون إنترنت.</div>
+            <button className="btn ghost" onClick={() => setRestoring(true)}>عندي نسخة احتياطية من البرنامج — استعادة بيانات محلي</button>
           </div>
         )}
         {step === 1 && (
@@ -224,7 +237,7 @@ export function LicensePanel({ onActivated }: { onActivated?: () => void }) {
   return (
     <div className="col">
       <div className={`alert ${l?.canOperate ? (l.state === 'trial' ? 'info' : 'success') : 'danger'}`}>
-        <KeyRound size={18} /> <div><b>{stateText[l?.state ?? 'trial']}</b>{l?.customer && <div className="small">مرخص لـ: {l.customer}</div>}</div>
+        <KeyRound size={18} /> <div><b>{stateText[l?.state ?? 'trial']}</b>{l?.customer && <div className="small">مرخص لـ: {l.customer}</div>}{l?.limits && <div className="small">{l.limits.editionLabel ? `${l.limits.editionLabel} — ` : ''}الحد الأقصى للمستخدمين النشطين: {l.limits.maxUsers}</div>}</div>
       </div>
       <Field label="كود الجهاز" help="أرسل هذا الكود للشركة للحصول على كود التفعيل.">
         <div className="row">
@@ -269,34 +282,13 @@ export function LicenseBlocked() {
 /* ------------------------------------------------------------------ recovery */
 
 export function RecoveryScreen() {
-  const { boot, refresh } = useApp();
-  const { run, busy } = useAction();
-  const [picked, setPicked] = useState<{ token: string; info: any } | null>(null);
-  const inspect = (file?: string) => run(async () => {
-    const r = await api('backup.inspect', { file });
-    if (!r.canceled) setPicked(r);
-  });
+  const { refresh } = useApp();
   return (
     <div className="auth-bg">
       <div className="auth-card wide">
         <div className="row mb"><ShieldAlert color="var(--danger)" size={28} /><h1>استعادة البيانات</h1></div>
-        <div className="alert danger mb">تعذر فتح قاعدة بيانات المحل بشكل سليم (قد يكون بسبب انقطاع الكهرباء أو عطل في القرص). اختر أحدث نسخة احتياطية لاستعادة بياناتك.</div>
-        {!picked ? (
-          <div className="col">
-            {(boot?.backups ?? []).filter((b) => b.reason !== 'invalid').slice(0, 8).map((b) => (
-              <button key={b.file} className="btn block" style={{ justifyContent: 'space-between', height: 46 }} onClick={() => inspect(b.file)}>
-                <span>{b.storeName}</span><span className="num">{dateTime(b.createdAt.replace('Z', ''))}</span>
-              </button>
-            ))}
-            <button className="btn" onClick={() => inspect()}>اختيار ملف نسخة احتياطية من الجهاز…</button>
-          </div>
-        ) : (
-          <div className="col">
-            <div className="alert success">النسخة سليمة: {picked.info.storeName} — {picked.info.counts?.products} منتج، {picked.info.counts?.sales} فاتورة</div>
-            <button className="btn primary lg" disabled={busy} onClick={() => run(async () => { await api('backup.restore', { token: picked.token }); await refresh(); }, 'تمت استعادة البيانات')}>استعادة هذه النسخة</button>
-            <button className="btn" onClick={() => setPicked(null)}>اختيار نسخة أخرى</button>
-          </div>
-        )}
+        <div className="alert danger mb">تعذر فتح قاعدة بيانات المحل بشكل سليم (قد يكون بسبب انقطاع الكهرباء أو عطل في القرص). اختر أحدث نسخة احتياطية لاستعادة بياناتك. الملف التالف لن يُحذف وسيُحفظ جانبًا.</div>
+        <RestoreFlow onDone={() => void refresh()} />
       </div>
     </div>
   );

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { DatabaseBackup, FolderOpen, KeyRound, RotateCcw, ScrollText } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, DatabaseBackup, FolderOpen, KeyRound, RotateCcw, ScrollText, Usb } from 'lucide-react';
 import { api } from '../lib/api';
 import { useApp } from '../lib/app';
 import { dateTime, num } from '../lib/format';
 import { DateRangePicker, Empty, Loading, Modal, PageHeader, SettingRow, Switch, NumberInput, presetRange, useAction, type Range } from '../components/ui';
 import { LicensePanel } from './Auth';
+import { RestoreFlow, fmtBackupDate } from '../components/RestoreFlow';
 
 export default function Admin({ tab }: { tab: 'audit' | 'backup' | 'license' }) {
   if (tab === 'audit') return <AuditPage />;
@@ -65,56 +66,55 @@ function AuditPage() {
 }
 
 function BackupPage() {
-  const { settings, setSettings } = useApp();
+  const { settings, setSettings, refresh } = useApp();
   const { run, busy } = useAction();
   const list = useQuery({ queryKey: ['backups'], queryFn: () => api('backup.list') });
-  const [restore, setRestore] = useState<{ token: string; info: any } | null>(null);
+  const [restoring, setRestoring] = useState(false);
   const upd = (patch: Record<string, unknown>) => run(async () => setSettings(await api('settings.update', patch)), 'تم الحفظ');
-  const reasons: Record<string, string> = { manual: 'يدوي', auto: 'تلقائي', 'day-close': 'إغلاق يوم', 'before-restore': 'قبل استعادة', invalid: 'ملف تالف' };
+  const reasons: Record<string, string> = { manual: 'يدوية', auto: 'تلقائية', 'day-close': 'إغلاق يوم', 'before-restore': 'قبل استعادة', 'before-update': 'قبل تحديث', export: 'نسخة خارجية', invalid: 'ملف تالف' };
+  const last = list.data?.last;
+  const days = last ? Math.floor((Date.now() - new Date(last.at).getTime()) / 86400000) : null;
   return (
     <div style={{ maxWidth: 1000 }}>
-      <PageHeader title="النسخ الاحتياطي" icon={<DatabaseBackup color="var(--primary)" />} actions={<>
-        <button className="btn" onClick={() => void api('backup.openDir')}><FolderOpen size={16} /> فتح المجلد</button>
-        <button className="btn" onClick={() => run(async () => { const r = await api('backup.inspect', {}); if (!r.canceled) setRestore(r); })}><RotateCcw size={16} /> استعادة من ملف</button>
-        <button className="btn" onClick={() => run(async () => { const r = await api('backup.createAs'); if (!r.canceled) await list.refetch(); }, undefined)}>حفظ نسخة في مكان آخر (فلاشة)</button>
-        <button className="btn primary" disabled={busy} onClick={() => run(async () => { await api('backup.create'); await list.refetch(); }, 'تم إنشاء النسخة الاحتياطية بنجاح')}><DatabaseBackup size={16} /> نسخة احتياطية الآن</button>
-      </>} />
+      <PageHeader title="النسخ الاحتياطي" icon={<DatabaseBackup color="var(--primary)" />} />
+      <div className="card pad mb">
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+          <div className="col" style={{ gap: 4 }}>
+            <div className="small muted">آخر نسخة احتياطية</div>
+            {last ? <>
+              <div className="bold num" style={{ fontSize: 18 }}>{fmtBackupDate(last.at)}</div>
+              <div className="small">{last.verified ? <span className="success-text"><CheckCircle2 size={14} /> الحالة: سليمة وتم التحقق منها</span> : <span className="danger-text"><AlertTriangle size={14} /> لم يتم التحقق</span>} • {reasons[last.reason] ?? last.reason} • {num(last.size / 1024 / 1024, 1)} ميجا</div>
+              {days !== null && days >= 7 && <div className="alert warning small mt"><AlertTriangle size={14} /> لم يتم إنشاء نسخة احتياطية منذ {days} أيام.</div>}
+            </> : <div className="alert warning small"><AlertTriangle size={14} /> لم يتم إنشاء أي نسخة احتياطية بعد.</div>}
+          </div>
+          <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+            <button className="btn primary" disabled={busy} onClick={() => run(async () => { await api('backup.create'); await list.refetch(); }, 'تم إنشاء النسخة الاحتياطية والتحقق منها بنجاح')}><DatabaseBackup size={16} /> {busy ? 'جارٍ النسخ…' : 'إنشاء نسخة الآن'}</button>
+            <button className="btn" onClick={() => setRestoring(true)}><RotateCcw size={16} /> استعادة نسخة</button>
+            <button className="btn" onClick={() => run(async () => { const r = await api('backup.createAs'); if (!r.canceled) await list.refetch(); }, undefined)}><Usb size={16} /> حفظ نسخة على فلاشة</button>
+            <button className="btn" onClick={() => void api('backup.openDir')}><FolderOpen size={16} /> فتح مجلد النسخ</button>
+          </div>
+        </div>
+      </div>
       <div className="card pad mb">
         <SettingRow title="نسخ احتياطي تلقائي" desc="ينسخ البيانات في الخلفية بدون إزعاج"><Switch checked={settings['backup.auto']} onChange={(v) => void upd({ 'backup.auto': v })} /></SettingRow>
         <SettingRow title="نسخة عند إغلاق اليوم"><Switch checked={settings['backup.onDayClose']} onChange={(v) => void upd({ 'backup.onDayClose': v })} /></SettingRow>
         <SettingRow title="كل (ساعة)"><div style={{ width: 100 }}><NumberInput value={settings['backup.frequencyHours']} onChange={(v) => v && void upd({ 'backup.frequencyHours': v })} /></div></SettingRow>
         <SettingRow title="عدد النسخ التلقائية المحفوظة"><div style={{ width: 100 }}><NumberInput value={settings['backup.keep']} onChange={(v) => v && void upd({ 'backup.keep': v })} /></div></SettingRow>
         <SettingRow title="مجلد النسخ" desc={list.data?.dir}><button className="btn sm" onClick={() => run(async () => { const r = await api('backup.chooseDir'); if (!r.canceled) { await list.refetch(); setSettings(await api('settings.get')); } })}>تغيير المجلد</button></SettingRow>
-        <div className="alert info small mt">نصيحة: انسخ نسخة احتياطية على فلاشة أو خارج الجهاز مرة أسبوعيًا على الأقل لحماية بياناتك من عطل القرص.</div>
+        <div className="alert info small mt">نصيحة: احفظ نسخة على فلاشة أو خارج الجهاز مرة أسبوعيًا على الأقل لحماية بياناتك من عطل القرص.</div>
       </div>
       <div className="card">
         {!list.data?.items.length ? <Empty title="لا توجد نسخ احتياطية بعد" /> : (
-          <table className="table"><thead><tr><th>التاريخ</th><th>النوع</th><th>المحل</th><th className="n">الحجم</th><th>الإصدار</th><th /></tr></thead>
-            <tbody>{list.data.items.map((b: any) => <tr key={b.file}><td className="num small">{dateTime(new Date(b.createdAt).toISOString().replace('Z', '').slice(0, 19))}</td><td>{reasons[b.reason ?? 'manual'] ?? b.reason}</td><td>{b.storeName}</td><td className="n">{num(b.fileSize / 1024, 0)} KB</td><td className="small">{b.appVersion}</td><td>{b.reason !== 'invalid' && <button className="btn sm" onClick={() => run(async () => setRestore(await api('backup.inspect', { file: b.file })))}>استعادة</button>}</td></tr>)}</tbody></table>
+          <table className="table"><thead><tr><th>التاريخ</th><th>النوع</th><th>المحل</th><th className="n">الحجم</th><th>الإصدار</th></tr></thead>
+            <tbody>{list.data.items.map((b: any) => <tr key={b.file}><td className="num small">{fmtBackupDate(b.createdAt)}</td><td>{reasons[b.reason ?? 'manual'] ?? b.reason}</td><td>{b.storeName}</td><td className="n">{num(b.fileSize / 1024 / 1024, 1)} ميجا</td><td className="small num">{b.appVersion}</td></tr>)}</tbody></table>
         )}
       </div>
-      {restore && <RestoreDialog data={restore} onClose={() => setRestore(null)} />}
+      {restoring && (
+        <Modal title="استعادة نسخة احتياطية" onClose={() => setRestoring(false)}>
+          <RestoreFlow compact onCancel={() => setRestoring(false)} onDone={() => { setRestoring(false); void refresh(); }} />
+        </Modal>
+      )}
     </div>
-  );
-}
-
-function RestoreDialog({ data, onClose }: { data: { token: string; info: any }; onClose: () => void }) {
-  const { refresh } = useApp();
-  const { run, busy } = useAction();
-  const [ok, setOk] = useState(false);
-  const i = data.info;
-  return (
-    <Modal title="استعادة نسخة احتياطية" onClose={onClose} footer={<button className="btn danger" disabled={!ok || busy} onClick={() => run(async () => { await api('backup.restore', { token: data.token }); await refresh(); }, 'تمت الاستعادة — سجّل الدخول مرة أخرى')}>استعادة الآن</button>}>
-      <div className="col">
-        <div className="alert success">الملف سليم وتم التحقق منه.</div>
-        <table className="table"><tbody>
-          <tr><td>المحل</td><td className="bold">{i.storeName}</td></tr><tr><td>تاريخ النسخة</td><td className="num">{new Date(i.createdAt).toLocaleString('ar-EG')}</td></tr>
-          <tr><td>المنتجات</td><td>{i.counts?.products}</td></tr><tr><td>الفواتير</td><td>{i.counts?.sales}</td></tr><tr><td>المشتريات</td><td>{i.counts?.purchases}</td></tr>
-        </tbody></table>
-        <div className="alert warning">سيتم استبدال البيانات الحالية بهذه النسخة. سيحفظ البرنامج نسخة من بياناتك الحالية أولًا تلقائيًا للأمان.</div>
-        <label className="check"><input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} /> أفهم ذلك وأريد المتابعة</label>
-      </div>
-    </Modal>
   );
 }
 

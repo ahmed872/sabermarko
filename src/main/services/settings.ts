@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { AppError } from '../../shared/errors';
 import { DEFAULT_SETTINGS, type SettingKey, type StoreSettings } from '../../shared/settings';
 import { setupInput, type SetupInput } from '../../shared/schemas';
@@ -90,6 +91,8 @@ export function completeSetup(ctx: Ctx, raw: SetupInput) {
       for (const f of ['features.multiLocation', 'features.expiry', 'features.purchaseOrders', 'features.priceLists', 'features.promotions', 'features.quotations'] as SettingKey[]) set(f, true);
     }
     ctx.db.prepare('UPDATE stores SET name = ? WHERE id = 1').run(input.storeName);
+    // installation/store identity (written into backup metadata; no secrets)
+    ctx.db.prepare(`INSERT INTO app_meta(key, value) VALUES ('store_uid', ?) ON CONFLICT(key) DO NOTHING`).run(randomUUID());
     if (input.starterCategories) {
       const ins = ctx.db.prepare('INSERT INTO categories(name, sort_order) VALUES (?, ?) ON CONFLICT(name) DO NOTHING');
       STARTER_CATEGORIES.forEach((c, i) => ins.run(c, i));

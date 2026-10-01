@@ -39,6 +39,7 @@ export const routes: Record<string, Route> = {
   // users & roles
   'users.list': { fn: (c) => users.listUsers(c) },
   'users.names': { fn: (c) => users.listUserNames(c) },
+  'users.quota': { fn: (c) => { if (!c.user) throw new AppError('NOT_AUTHENTICATED'); return users.userQuota(c); } },
   'users.save': { fn: (c, p) => users.saveUser(c, p.id ?? null, p.data) },
   'roles.list': { fn: (c) => users.listRoles(c) },
   'roles.save': { fn: (c, p) => users.saveRole(c, p.id ?? null, p.data) },

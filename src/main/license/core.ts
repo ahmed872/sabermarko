@@ -1,4 +1,5 @@
 import { createHash, createHmac, createPublicKey, timingSafeEqual, verify } from 'node:crypto';
+import { limitsFrom, type LicenseLimits } from '../../shared/license-policy';
 
 /**
  * Licensing core (pure, testable).
@@ -29,6 +30,11 @@ export interface LicensePayload {
   machine: string; // machine code or '*'
   issued: string; // YYYY-MM-DD
   expires: string | null; // YYYY-MM-DD (inclusive) for temporary
+  /* optional fields (added later — older keys without them stay valid) */
+  edition?: 'basic' | 'standard' | 'professional';
+  maxUsers?: number;
+  features?: string[];
+  store?: string; // store identity the key was issued for (informational)
 }
 
 export interface StoredState {
@@ -56,6 +62,8 @@ export interface LicenseStatus {
   customer: string | null;
   licenseId: string | null;
   machineCode: string;
+  limits: LicenseLimits;
+  features: string[];
   message?: string;
 }
 
@@ -185,7 +193,7 @@ export class LicenseManager {
     if (!this.state) this.load();
     const s = this.state!;
     const now = this.clock();
-    const base = { machineCode: this.machineCode, customer: null, licenseId: null, expiresAt: null, trialEndsAt: null } as const;
+    const base = { machineCode: this.machineCode, customer: null, licenseId: null, expiresAt: null, trialEndsAt: null, limits: limitsFrom(null), features: [] as string[] };
     const highWater = Math.max(s.lastSeen, this.latestDataTime());
     if (now + CLOCK_TOLERANCE_MS < highWater) {
       return { ...base, state: 'clock', type: 'trial', canOperate: false, daysLeft: null };
@@ -195,14 +203,15 @@ export class LicenseManager {
       if (res.ok) {
         const p = res.payload;
         const daysLeft = p.type === 'temporary' && p.expires ? Math.max(0, Math.ceil((endOfDay(p.expires) - now) / DAY)) : null;
-        return { ...base, state: 'licensed', type: p.type, canOperate: true, daysLeft, expiresAt: p.expires, customer: p.customer, licenseId: p.id };
+        return { ...base, state: 'licensed', type: p.type, canOperate: true, daysLeft, expiresAt: p.expires, customer: p.customer, licenseId: p.id, limits: limitsFrom(p), features: Array.isArray(p.features) ? p.features : [] };
       }
       if (res.error === 'LICENSE_EXPIRED') {
         const p = JSON.parse(b64urlDecode(s.licenseKey.split('.')[1]).toString('utf8')) as LicensePayload;
         return { ...base, state: 'expired', type: 'temporary', canOperate: false, daysLeft: 0, expiresAt: p.expires, customer: p.customer, licenseId: p.id };
       }
-      // invalid/wrong machine key stored: fall through to trial evaluation but mark tamper
-      this.tampered = true;
+      // A stored key that no longer verifies (signed by a rotated vendor key, or for another machine after
+      // the data folder was copied) is not evidence of tampering: the seal around it was valid. Ignore it and
+      // fall back to the trial clock — once the trial is over this asks for a new activation code.
     }
     const trialEnd = s.trialStart + TRIAL_DAYS * DAY;
     const trialEndsAt = isoDate(trialEnd);

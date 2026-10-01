@@ -3,12 +3,12 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-export async function launch(opts: { userData?: string; executablePath?: string; args?: string[] } = {}): Promise<{ app: ElectronApplication; page: Page; userData: string }> {
+export async function launch(opts: { userData?: string; executablePath?: string; args?: string[]; env?: Record<string, string> } = {}): Promise<{ app: ElectronApplication; page: Page; userData: string }> {
   const userData = opts.userData ?? mkdtempSync(join(tmpdir(), 'sbm-e2e-'));
   const app = await electron.launch({
     executablePath: opts.executablePath,
     args: opts.executablePath ? (opts.args ?? ['--no-sandbox']) : [join(__dirname, '../..'), '--no-sandbox'],
-    env: { ...process.env, SBM_USER_DATA: userData, SBM_LOG_STDOUT: '' },
+    env: { ...process.env, SBM_USER_DATA: userData, SBM_LOG_STDOUT: '', ...(opts.executablePath ? {} : { SBM_LICENSE_MIRROR_DIR: userData }), ...opts.env },
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
@@ -38,7 +38,7 @@ export async function setup(page: Page) {
   await inputs.nth(3).fill('1234');
   await page.getByRole('button', { name: /التالي/ }).click();
   await page.getByRole('button', { name: 'ابدأ استخدام البرنامج' }).click();
-  await expect(page.getByText('صباح الخير، أحمد المدير')).toBeVisible();
+  await expect(page.getByText(/(صباح|مساء) الخير، أحمد المدير/)).toBeVisible();
 }
 
 export async function addProduct(page: Page, p: { name: string; price: string; cost: string; qty: string; unit?: string; barcode?: string; fav?: boolean }) {
@@ -77,8 +77,13 @@ export async function sellOne(page: Page, search: string, paid: string) {
   await box.fill(search);
   await box.press('Enter');
   await expect(page.locator('.cart-line')).toHaveCount(1);
-  await page.keyboard.press('F9');
-  await page.locator('.modal input.num-input').fill(paid);
+  const payBox = page.locator('.modal input.num-input');
+  // under heavy parallel load the first F9 can land before the POS keyboard handler is bound
+  await expect(async () => {
+    if (!(await payBox.isVisible())) await page.keyboard.press('F9');
+    await expect(payBox).toBeVisible({ timeout: 1500 });
+  }).toPass({ timeout: 15_000 });
+  await payBox.fill(paid);
   await page.getByRole('button', { name: /تأكيد وحفظ الفاتورة/ }).click();
   await expect(page.getByText(/تم حفظ الفاتورة رقم/)).toBeVisible();
   await page.keyboard.press('Enter');

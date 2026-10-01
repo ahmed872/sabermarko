@@ -1,12 +1,13 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, type IpcMainInvokeEvent } from 'electron';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { APP_ID, VENDOR } from '../shared/brand';
 import { AppError } from '../shared/errors';
 import { routes, toErrorPayload } from './api';
-import { backupFileName, createBackup, listBackups, pruneBackups, restoreBackup, validateBackup } from './backup';
+import { backupFileName, createBackup, listBackups, pruneBackups, restoreBackup, storeIdOf, validateBackup } from './backup';
+import { limitsFrom } from '../shared/license-policy';
 import { migrate, openDatabase, quickCheck, type DB } from './db/connection';
 import { seedSystemData } from './db/seed';
 import { LicenseManager, formatMachineCode, type LicenseStatus } from './license/core';
@@ -82,7 +83,11 @@ function latestDataTime(): number {
 
 function initLicense() {
   const machineCode = formatMachineCode(rawMachineId(join(userData, '.mid')), APP_ID);
-  license = new LicenseManager(createNodeLicenseStorage(userData, () => db, APP_ID), machineCode, LICENSE_PUBLIC_KEY, () => Date.now(), () => randomUUID(), latestDataTime);
+  // Tests of the UNPACKED dev build may supply their own verification key; a packaged (shipped) app always uses the embedded one.
+  const testKey = !app.isPackaged && process.env.SBM_TEST_LICENSE_PUBKEY ? readFileSync(process.env.SBM_TEST_LICENSE_PUBKEY, 'utf8') : null;
+  // Likewise, automated tests of the unpacked build isolate the OS-level mirror so runs do not share one trial.
+  const mirrorDir = !app.isPackaged && process.env.SBM_LICENSE_MIRROR_DIR ? process.env.SBM_LICENSE_MIRROR_DIR : null;
+  license = new LicenseManager(createNodeLicenseStorage(userData, () => db, APP_ID, mirrorDir), machineCode, testKey ?? LICENSE_PUBLIC_KEY, () => Date.now(), () => randomUUID(), latestDataTime);
   license.load();
   setInterval(() => { try { license.touch(); } catch (e) { log.warn('license touch failed', e); } }, 10 * 60_000).unref();
 }
@@ -90,13 +95,13 @@ function initLicense() {
 function licenseStatus(): LicenseStatus {
   try { return license.status(); } catch (e) {
     log.error('license status failed', e);
-    return { state: 'tampered', type: 'trial', canOperate: false, daysLeft: 0, trialEndsAt: null, expiresAt: null, customer: null, licenseId: null, machineCode: '' };
+    return { state: 'tampered', type: 'trial', canOperate: false, daysLeft: 0, trialEndsAt: null, expiresAt: null, customer: null, licenseId: null, machineCode: '', limits: limitsFrom(null), features: [] };
   }
 }
 
 function makeCtx(user: SessionUser | null): Ctx {
   if (!db) throw new AppError('RESTORE_FAILED');
-  return { db, user, now: () => new Date() };
+  return { db, user, now: () => new Date(), limits: licenseStatus().limits };
 }
 
 /* ------------------------------------------------------------------ backups */
@@ -106,15 +111,38 @@ function backupDir(): string {
   return configured || join(app.getPath('documents'), 'SaberMarko Backups');
 }
 
-async function doBackup(reason: 'manual' | 'auto' | 'day-close' | 'before-update', dest?: string) {
+async function doBackup(reason: 'manual' | 'auto' | 'day-close' | 'before-update' | 'export', dest?: string) {
   if (!db) throw new AppError('BACKUP_FAILED');
   const storeName = getSetting(db, 'store.name');
   const file = dest ?? join(backupDir(), backupFileName(storeName));
-  const info = await createBackup(db, file, { appVersion: app.getVersion(), storeName, reason });
+  const t0 = Date.now();
+  // createBackup verifies the written file completely (checksum, gzip, integrity, version, row counts)
+  const info = await createBackup(db, file, { appVersion: app.getVersion(), storeName, reason, workDir });
   setSettingRaw(db, 'backup.lastAt', ts(makeCtx(null)));
-  if (reason !== 'manual') pruneBackups(backupDir(), getSetting(db, 'backup.keep'));
-  log.info(`backup created (${reason})`, file);
+  db.prepare(`INSERT INTO app_meta(key, value) VALUES ('backup_last', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
+    .run(JSON.stringify({ at: ts(makeCtx(null)), file, size: info.fileSize, verified: !!info.verified, reason, ms: Date.now() - t0 }));
+  if (reason !== 'manual' && reason !== 'export') await pruneBackups(backupDir(), getSetting(db, 'backup.keep'));
+  log.info(`backup created (${reason}) in ${Date.now() - t0}ms`, file);
   return info;
+}
+
+function lastBackup(): { at: string; file: string; size: number; verified: boolean; reason: string } | null {
+  if (!db) return null;
+  try {
+    const r = db.prepare(`SELECT value FROM app_meta WHERE key = 'backup_last'`).get() as { value: string } | undefined;
+    return r ? JSON.parse(r.value) : null;
+  } catch { return null; }
+}
+
+/** No user exists yet: a fresh install. Restoring a backup is allowed from the first-run screen. */
+function needsSetupNow(): boolean {
+  if (!db) return false;
+  return (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n === 0;
+}
+
+function requireBackupAccess(ctx: Ctx | null) {
+  if (recoveryMode || !db || needsSetupNow()) return;
+  requirePerm(ctx!, 'backup.manage');
 }
 
 async function maybeAutoBackup() {
@@ -161,9 +189,9 @@ function senderAllowed(e: IpcMainInvokeEvent): boolean {
 type Special = (payload: any, ctx: Ctx | null) => unknown | Promise<unknown>;
 
 const special: Record<string, Special> = {
-  'app.boot': () => {
+  'app.boot': async () => {
     const lic = licenseStatus();
-    if (recoveryMode || !db) return { recovery: true, license: lic, version: app.getVersion(), backups: listBackups(backupDir()).slice(0, 20) };
+    if (recoveryMode || !db) return { recovery: true, license: lic, version: app.getVersion(), backups: (await listBackups(backupDir())).slice(0, 20) };
     const ctx = makeCtx(currentUser);
     if (currentUser) currentUser = reloadUser(ctx, currentUser.id);
     return {
@@ -211,7 +239,7 @@ const special: Record<string, Special> = {
     if (res.canceled || !res.filePath) return { canceled: true };
     return doBackup('manual', res.filePath.endsWith('.sbmbak') ? res.filePath : `${res.filePath}.sbmbak`);
   },
-  'backup.list': (_p, ctx) => { if (ctx) requirePerm(ctx, 'backup.manage'); return { dir: backupDir(), items: listBackups(backupDir()) }; },
+  'backup.list': async (_p, ctx) => { requireBackupAccess(ctx); return { dir: backupDir(), items: await listBackups(backupDir()), last: lastBackup() }; },
   'backup.openDir': () => { mkdirSync(backupDir(), { recursive: true }); return shell.openPath(backupDir()); },
   'backup.chooseDir': async (_p, ctx) => {
     requirePerm(ctx!, 'backup.manage');
@@ -221,39 +249,42 @@ const special: Record<string, Special> = {
     return { dir: res.filePaths[0] };
   },
   'backup.inspect': async (p, ctx) => {
-    if (ctx) requirePerm(ctx, 'backup.manage');
+    requireBackupAccess(ctx);
     let file: string | undefined = p?.file;
-    if (file && !listBackups(backupDir()).some((b) => b.file === file)) file = undefined; // only files we listed
+    if (file && !(await listBackups(backupDir())).some((b) => b.file === file)) file = undefined; // only files we listed
     if (!file) {
       const res = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'], defaultPath: backupDir(), filters: [{ name: 'نسخة احتياطية', extensions: ['sbmbak'] }] });
       if (res.canceled || !res.filePaths[0]) return { canceled: true };
       file = res.filePaths[0];
     }
-    const { info, dbFile } = validateBackup(file, workDir);
+    const { info, dbFile } = await validateBackup(file, workDir);
     try { unlinkSync(dbFile); } catch { /* ignore */ }
     const token = randomUUID();
     pendingRestores.set(token, file);
-    return { token, info };
+    const currentStoreId = db && !needsSetupNow() ? storeIdOf(db) : null;
+    return { token, info, otherStore: !!(currentStoreId && info.storeId && info.storeId !== currentStoreId), freshInstall: needsSetupNow() };
   },
   'backup.restore': async (p, ctx) => {
-    if (ctx) requirePerm(ctx, 'backup.manage');
+    requireBackupAccess(ctx);
     const file = pendingRestores.get(String(p?.token ?? ''));
     if (!file) throw new AppError('BACKUP_INVALID');
     pendingRestores.delete(String(p.token));
     const storeName = db ? getSetting(db, 'store.name') : '';
-    if (db) {
+    if (db && !recoveryMode) {
       const result = await restoreBackup({
         file, dbPath, workDir, db, appVersion: app.getVersion(), storeName,
         close: () => { db!.close(); db = null; },
         reopen: () => { db = openDb(); return db; },
       });
-      if (ctx?.user) audit(makeCtx(null), 'backup.restore', 'backup', null, undefined, { file, by: ctx.user.username });
+      audit(makeCtx(null), 'backup.restore', 'backup', null, undefined, { file, by: ctx?.user?.username ?? 'first-run', backupDate: result.info.createdAt, schema: result.info.schemaVersion, counts: result.after });
       currentUser = null;
       recoveryMode = false;
-      return { ok: true, info: result.info };
+      return { ok: true, info: result.info, after: result.after, safetyFile: result.safetyFile };
     }
-    // recovery mode: live DB is unusable; keep the broken file aside and install the backup
-    const { dbFile } = validateBackup(file, workDir);
+    // recovery mode: live DB is unusable; keep the broken file aside (never deleted) and install the backup
+    const { dbFile, info } = await validateBackup(file, workDir);
+    try { db?.close(); } catch { /* ignore */ }
+    db = null;
     const broken = `${dbPath}.broken-${Date.now()}`;
     try { if (existsSync(dbPath)) renameSync(dbPath, broken); } catch { /* ignore */ }
     for (const ext of ['-wal', '-shm']) { try { rmSync(dbPath + ext, { force: true }); } catch { /* ignore */ } }
@@ -261,7 +292,9 @@ const special: Record<string, Special> = {
     db = openDb();
     recoveryMode = !quickCheck(db);
     currentUser = null;
-    return { ok: true };
+    const after = Object.fromEntries(['products', 'sales', 'purchases', 'customers', 'suppliers', 'users', 'stock_movements'].map((t) => [t, (db!.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n]));
+    log.info('restored from backup in recovery mode', { file, broken });
+    return { ok: true, info, after };
   },
   'print.sale': async (p, ctx) => {
     const sale = getSale(ctx!, p.id);
@@ -300,7 +333,8 @@ ipcMain.handle('api', async (event, channel: unknown, payload: unknown) => {
     const route = routes[name];
     if (!sp && !route) throw new AppError('NOT_FOUND');
     if (recoveryMode && !['app.boot', 'app.info', 'backup.inspect', 'backup.restore', 'backup.list', 'license.status'].includes(name)) throw new AppError('RESTORE_FAILED');
-    const isPublic = route?.public || ['app.boot', 'app.info', 'auth.login', 'license.status', 'license.activate'].includes(name) || (recoveryMode && !!sp);
+    const isPublic = route?.public || ['app.boot', 'app.info', 'auth.login', 'license.status', 'license.activate'].includes(name) || (recoveryMode && !!sp)
+      || (['backup.list', 'backup.inspect', 'backup.restore'].includes(name) && needsSetupNow());
     // reload the session user on every call so role changes / deactivation apply immediately
     if (currentUser && db) currentUser = reloadUser(makeCtx(null), currentUser.id);
     if (!isPublic && !currentUser) throw new AppError('NOT_AUTHENTICATED');

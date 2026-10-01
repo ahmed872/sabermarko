@@ -5,7 +5,7 @@ import { CheckCircle2, ClipboardList, Plus, Search } from 'lucide-react';
 import { api } from '../lib/api';
 import { useApp } from '../lib/app';
 import { dateTime, money, qty } from '../lib/format';
-import { Empty, Field, Loading, Modal, PageHeader, QtyInput, Segmented, Stat, useAction, useConfirm } from '../components/ui';
+import { Empty, Field, Loading, Modal, PageHeader, QtyInput, Segmented, Stat, useAction, useConfirm, useToast } from '../components/ui';
 
 export default function Stocktake() {
   return <Routes><Route index element={<StocktakeList />} /><Route path=":id" element={<StocktakeSheet />} /></Routes>;
@@ -59,6 +59,7 @@ function StocktakeSheet() {
   const sid = Number(id);
   const nav = useNavigate();
   const qc = useQueryClient();
+  const toast = useToast();
   const confirm = useConfirm();
   const { can } = useApp();
   const { run, busy } = useAction();
@@ -71,7 +72,7 @@ function StocktakeSheet() {
   const d = st.data;
   const open = d.status === 'open';
   const save = async (productId: number, v: number | null) => {
-    try { await api('stocktake.count', { id: sid, productId, qty: v }); void qc.invalidateQueries({ queryKey: ['stocktake', sid] }); } catch (e) { alert((e as Error).message); }
+    try { await api('stocktake.count', { id: sid, productId, qty: v }); void qc.invalidateQueries({ queryKey: ['stocktake', sid] }); } catch (e) { toast((e as Error).message, 'error'); }
   };
   return (
     <div>

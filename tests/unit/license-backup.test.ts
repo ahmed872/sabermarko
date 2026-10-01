@@ -170,7 +170,7 @@ describe('backup & restore (spec §62)', () => {
     const file = join(dir, 'b1.sbmbak');
     const info = await createBackup(db, file, { appVersion: '1.0.0', storeName: 'البركة', reason: 'manual' });
     expect(info.schemaVersion).toBeGreaterThan(0);
-    expect(readHeader(file).storeName).toBe('البركة');
+    expect((await readHeader(file)).storeName).toBe('البركة');
     // change data after backup
     db.prepare(`UPDATE settings SET value = '"تغيير"' WHERE key = 'store.name'`).run();
     const res = await restoreBackup({ file, dbPath, workDir: dir, db, appVersion: '1.0.0', storeName: 'x', close: () => db.close(), reopen: () => { db = openDatabase(dbPath); migrate(db); return db; } });
@@ -189,19 +189,19 @@ describe('backup & restore (spec §62)', () => {
     const buf = readFileSync(file);
     const corrupt = Buffer.from(buf); corrupt[corrupt.length - 20] ^= 0xff;
     writeFileSync(join(dir, 'corrupt.sbmbak'), corrupt);
-    expect(() => validateBackup(join(dir, 'corrupt.sbmbak'), dir)).toThrow('BACKUP_INVALID');
+    await expect(validateBackup(join(dir, 'corrupt.sbmbak'), dir)).rejects.toThrow('BACKUP_INVALID');
     writeFileSync(join(dir, 'random.sbmbak'), 'not a backup at all');
-    expect(() => validateBackup(join(dir, 'random.sbmbak'), dir)).toThrow('BACKUP_INVALID');
+    await expect(validateBackup(join(dir, 'random.sbmbak'), dir)).rejects.toThrow('BACKUP_INVALID');
     // newer schema version
     const text = buf.toString('latin1');
     const nl1 = text.indexOf('\n'); const nl2 = text.indexOf('\n', nl1 + 1);
     const header = JSON.parse(buf.subarray(nl1 + 1, nl2).toString('utf8'));
     header.schemaVersion = 999;
     writeFileSync(join(dir, 'newer.sbmbak'), Buffer.concat([buf.subarray(0, nl1 + 1), Buffer.from(JSON.stringify(header)), buf.subarray(nl2)]));
-    expect(() => validateBackup(join(dir, 'newer.sbmbak'), dir)).toThrow('BACKUP_NEWER');
+    await expect(validateBackup(join(dir, 'newer.sbmbak'), dir)).rejects.toThrow('BACKUP_NEWER');
     await expect(restoreBackup({ file: join(dir, 'corrupt.sbmbak'), dbPath, workDir: dir, db, appVersion: '1', storeName: 's', close: () => db.close(), reopen: () => db })).rejects.toThrow('BACKUP_INVALID');
     expect(db.open).toBe(true); // live db never closed for an invalid file
-    const list = listBackups(dir);
+    const list = await listBackups(dir);
     expect(list.filter((b) => b.reason === 'invalid').length).toBe(2); // newer one is readable but refused on restore
     db.close();
   });
@@ -217,10 +217,10 @@ describe('backup & restore (spec §62)', () => {
     const live = openDatabase(fileDb);
     for (let i = 0; i < 4; i++) await createBackup(live, join(dir, `auto-${i}.sbmbak`), { appVersion: '1', storeName: 's', reason: 'auto' });
     await createBackup(live, join(dir, 'manual.sbmbak'), { appVersion: '1', storeName: 's', reason: 'manual' });
-    const { info } = validateBackup(join(dir, 'manual.sbmbak'), dir);
+    const { info } = await validateBackup(join(dir, 'manual.sbmbak'), dir);
     expect(info.counts?.sales).toBe(5);
-    expect(pruneBackups(dir, 2)).toBe(2);
-    expect(listBackups(dir).length).toBe(3);
+    expect(await pruneBackups(dir, 2)).toBe(2);
+    expect((await listBackups(dir)).length).toBe(3);
     live.close();
   });
 });

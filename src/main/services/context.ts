@@ -22,6 +22,8 @@ export interface Ctx {
   /** A manager who approved a sensitive action in this request (supervisor override). */
   approver?: SessionUser | null;
   terminal?: string;
+  /** Commercial limits from the license (max users…). Absent in tests -> policy defaults. */
+  limits?: { maxUsers: number };
 }
 
 export function pad(n: number, w = 2): string {

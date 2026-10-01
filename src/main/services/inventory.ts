@@ -3,7 +3,7 @@ import { formatQty } from '../../shared/qty';
 import { normalizeArabic } from '../../shared/arabic';
 import { adjustmentInput, transferInput, type AdjustmentInput } from '../../shared/schemas';
 import {
-  type Ctx, audit, defaultLocationId, docNo, getSetting, requirePerm, today, ts, tx,
+  type Ctx, audit, can, defaultLocationId, docNo, getSetting, requirePerm, today, ts, tx,
 } from './context';
 
 export type MovementType =
@@ -234,8 +234,9 @@ export function productLedger(ctx: Ctx, productId: number, opts: { limit?: numbe
   requirePerm(ctx, 'inventory.view');
   const limit = Math.min(opts.limit ?? 100, 500);
   const where = opts.locationId ? 'AND m.location_id = @loc' : '';
+  const cost = can(ctx, 'reports.cost') ? 'm.unit_cost' : 'NULL AS unit_cost';
   return ctx.db.prepare(
-    `SELECT m.id, m.type, m.qty, m.qty_before, m.qty_after, m.unit_cost, m.ref_type, m.ref_id, m.note, m.created_at,
+    `SELECT m.id, m.type, m.qty, m.qty_before, m.qty_after, ${cost}, m.ref_type, m.ref_id, m.note, m.created_at,
             u.full_name AS user_name, l.name AS location_name,
             CASE m.ref_type
               WHEN 'sale' THEN (SELECT invoice_no FROM sales WHERE id = m.ref_id)
@@ -259,8 +260,9 @@ export function movementsReport(ctx: Ctx, opts: { from: string; to: string; type
   if (opts.type) conds.push('m.type = @type');
   if (opts.productId) conds.push('m.product_id = @pid');
   const params = { from: opts.from, to: opts.to, type: opts.type ?? null, pid: opts.productId ?? null, limit: Math.min(opts.limit ?? 200, 1000), offset: opts.offset ?? 0 };
+  const showCost = can(ctx, 'reports.cost');
   const rows = ctx.db.prepare(
-    `SELECT m.id, m.type, m.qty, m.qty_before, m.qty_after, m.unit_cost, m.note, m.created_at, m.ref_type, m.ref_id,
+    `SELECT m.id, m.type, m.qty, m.qty_before, m.qty_after, ${showCost ? 'm.unit_cost' : 'NULL AS unit_cost'}, m.note, m.created_at, m.ref_type, m.ref_id,
             p.name AS product_name, un.symbol AS unit_symbol, u.full_name AS user_name, l.name AS location_name
      FROM stock_movements m
      JOIN products p ON p.id = m.product_id
@@ -271,7 +273,7 @@ export function movementsReport(ctx: Ctx, opts: { from: string; to: string; type
      ORDER BY m.id DESC LIMIT @limit OFFSET @offset`,
   ).all(params);
   const totals = ctx.db.prepare(
-    `SELECT m.type, COUNT(*) AS cnt, SUM(m.qty) AS qty, SUM(ROUND(m.qty * m.unit_cost / 1000.0)) AS value
+    `SELECT m.type, COUNT(*) AS cnt, SUM(m.qty) AS qty, ${showCost ? 'SUM(ROUND(m.qty * m.unit_cost / 1000.0))' : 'NULL'} AS value
      FROM stock_movements m WHERE ${conds.join(' AND ')} GROUP BY m.type`,
   ).all(params);
   return { rows, totals };
@@ -279,10 +281,11 @@ export function movementsReport(ctx: Ctx, opts: { from: string; to: string; type
 
 export function listBatches(ctx: Ctx, productId: number) {
   requirePerm(ctx, 'inventory.view');
-  return ctx.db.prepare(
+  const showCost = can(ctx, 'reports.cost');
+  return (ctx.db.prepare(
     `SELECT b.*, l.name AS location_name FROM batches b JOIN locations l ON l.id = b.location_id
      WHERE b.product_id = ? ORDER BY (b.qty > 0) DESC, b.expiry_date`,
-  ).all(productId);
+  ).all(productId) as Record<string, unknown>[]).map((b) => (showCost ? b : { ...b, unit_cost: null }));
 }
 
 export function listInventoryDocs(ctx: Ctx, opts: { limit?: number } = {}) {
@@ -290,7 +293,7 @@ export function listInventoryDocs(ctx: Ctx, opts: { limit?: number } = {}) {
   return ctx.db.prepare(
     `SELECT d.*, u.full_name AS user_name, lf.name AS from_location, lt.name AS to_location,
             (SELECT COUNT(*) FROM stock_movements m WHERE m.ref_type = 'inventory_doc' AND m.ref_id = d.id) AS lines,
-            (SELECT SUM(ROUND(m.qty * m.unit_cost / 1000.0)) FROM stock_movements m WHERE m.ref_type = 'inventory_doc' AND m.ref_id = d.id AND m.type NOT IN ('transfer_in')) AS value
+            ${can(ctx, 'reports.cost') ? "(SELECT SUM(ROUND(m.qty * m.unit_cost / 1000.0)) FROM stock_movements m WHERE m.ref_type = 'inventory_doc' AND m.ref_id = d.id AND m.type NOT IN ('transfer_in'))" : 'NULL'} AS value
      FROM inventory_docs d LEFT JOIN users u ON u.id = d.user_id
      LEFT JOIN locations lf ON lf.id = d.from_location_id LEFT JOIN locations lt ON lt.id = d.to_location_id
      ORDER BY d.id DESC LIMIT ?`,

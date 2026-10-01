@@ -12,12 +12,16 @@ export default function Users() {
   const [editRole, setEditRole] = useState<any | null>(null);
   const users = useQuery({ queryKey: ['users'], queryFn: () => api<any[]>('users.list') });
   const roles = useQuery({ queryKey: ['roles'], queryFn: () => api<any[]>('roles.list') });
+  const quota = useQuery({ queryKey: ['userQuota'], queryFn: () => api<{ active: number; max: number; canAdd: boolean }>('users.quota') });
+  const full = quota.data ? !quota.data.canAdd : false;
   return (
     <div>
       <PageHeader title="المستخدمون والصلاحيات" icon={<UserCog color="var(--primary)" />} actions={tab === 'users'
-        ? <button className="btn primary" onClick={() => setEditUser({})}><Plus size={16} /> مستخدم جديد</button>
+        ? <>{quota.data && <span className={`badge ${full ? 'warning' : ''}`} title="عدد المستخدمين النشطين المسموح به في ترخيصك">المستخدمون النشطون: {quota.data.active} من {quota.data.max}</span>}
+          <button className="btn primary" disabled={full} title={full ? 'وصلت للحد الأقصى — أوقف مستخدمًا أو قم بترقية الترخيص' : undefined} onClick={() => setEditUser({})}><Plus size={16} /> مستخدم جديد</button></>
         : <button className="btn primary" onClick={() => setEditRole({ permissions: [] })}><Plus size={16} /> دور جديد</button>} />
       <Tabs value={tab} onChange={setTab} tabs={[{ value: 'users', label: 'المستخدمون' }, { value: 'roles', label: 'الأدوار والصلاحيات' }]} />
+      {tab === 'users' && full && <div className="alert warning small mb">وصلت للحد الأقصى لعدد المستخدمين النشطين في ترخيصك ({quota.data!.max}). لإضافة مستخدم جديد أوقف مستخدمًا غير مستخدم، أو قم بترقية الترخيص. المستخدم الموقوف لا يُحذف وتبقى فواتيره وسجله كما هي.</div>}
       {tab === 'users' && (
         <div className="card">
           {!users.data?.length ? <Empty title="لا يوجد مستخدمون" /> : (
@@ -36,7 +40,7 @@ export default function Users() {
           ))}
         </div>
       )}
-      {editUser && <UserDialog user={editUser} roles={roles.data ?? []} onClose={() => { setEditUser(null); void users.refetch(); }} />}
+      {editUser && <UserDialog user={editUser} roles={roles.data ?? []} onClose={() => { setEditUser(null); void users.refetch(); void quota.refetch(); }} />}
       {editRole && <RoleDialog role={editRole} onClose={() => { setEditRole(null); void roles.refetch(); }} />}
     </div>
   );
@@ -56,7 +60,7 @@ function UserDialog({ user, roles, onClose }: { user: any; roles: any[]; onClose
         <Field label={user.id ? 'كلمة مرور جديدة (اتركها فارغة بدون تغيير)' : 'كلمة المرور'}><input className="input" type="password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></Field>
         <Field label="الدور"><select className="select" value={f.roleId} onChange={(e) => setF({ ...f, roleId: Number(e.target.value) })}>{roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></Field>
         <Field label="أقصى خصم بدون موافقة %" help="فارغ = إعداد المحل العام"><NumberInput value={f.maxDiscountPct} allowEmpty onChange={(v) => setF({ ...f, maxDiscountPct: v })} /></Field>
-        {user.id && <label className="check"><input type="checkbox" checked={!!f.active} onChange={(e) => setF({ ...f, active: e.target.checked ? 1 : 0 })} /> نشط</label>}
+        {user.id && <label className="check"><input type="checkbox" checked={!!f.active} onChange={(e) => setF({ ...f, active: e.target.checked ? 1 : 0 })} /> نشط (إلغاء التحديد يوقف المستخدم عن الدخول دون حذف سجله)</label>}
       </div>
     </Modal>
   );
