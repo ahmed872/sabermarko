@@ -39,11 +39,15 @@ describe('license key from the repository secret', () => {
     expect(parseLicenseKey(code, repoPub, MACHINE, Date.now())).toEqual({ ok: false, error: 'LICENSE_INVALID' });
   });
 
-  it('accepts a secret pasted with literal \\n, and refuses a missing or invalid secret', () => {
+  it('accepts a secret pasted with literal \\n or without BEGIN/END lines, and refuses a missing or invalid secret', () => {
     const dir = mkdtempSync(join(tmpdir(), 'sbm-secret-'));
     const pubTs = join(dir, 'public-key.ts');
     const secret = generateKeyPairSync('ed25519').privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
     expect(run('use-secret-key.mjs', [], { SBM_LICENSE_PRIVATE_KEY: secret.replace(/\n/g, '\\n'), SBM_PUBLIC_KEY_TS: pubTs }).status).toBe(0);
+    // pasted without the BEGIN/END lines (body only, or body on one line)
+    const body = secret.split('\n').filter((l) => l && !l.startsWith('-----')).join('\n');
+    expect(run('use-secret-key.mjs', [], { SBM_LICENSE_PRIVATE_KEY: body, SBM_PUBLIC_KEY_TS: pubTs }).status).toBe(0);
+    expect(run('use-secret-key.mjs', [], { SBM_LICENSE_PRIVATE_KEY: ` ${body.replace(/\n/g, '')} `, SBM_PUBLIC_KEY_TS: pubTs }).status).toBe(0);
 
     const missing = run('use-secret-key.mjs', [], { SBM_LICENSE_PRIVATE_KEY: '', SBM_PUBLIC_KEY_TS: pubTs });
     expect(missing.status).toBe(2);

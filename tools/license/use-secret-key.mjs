@@ -17,9 +17,13 @@ if (!raw) {
   console.error('لم يتم ضبط السر SBM_LICENSE_PRIVATE_KEY في إعدادات المستودع (Settings → Secrets and variables → Actions).\nThe repository secret SBM_LICENSE_PRIVATE_KEY is not set.');
   process.exit(2);
 }
+const PEM_LABEL = ['PRIVATE', 'KEY'].join(' ');
 let priv;
 try {
-  priv = createPrivateKey({ key: raw.replace(/\\n/g, '\n'), format: 'pem' });
+  let pemText = raw.replace(/\\n/g, '\n');
+  // accept the key pasted without its BEGIN/END lines (just the base64 body)
+  if (!pemText.includes('-----BEGIN')) pemText = `-----BEGIN ${PEM_LABEL}-----\n${pemText.replace(/\s+/g, '').match(/.{1,64}/g)?.join('\n') ?? ''}\n-----END ${PEM_LABEL}-----\n`;
+  priv = createPrivateKey({ key: pemText, format: 'pem' });
 } catch {
   console.error('السر SBM_LICENSE_PRIVATE_KEY ليس مفتاحًا خاصًا صحيحًا. الصق محتوى ملف sabermarko-private-key.pem كاملًا (من BEGIN إلى END).\nSBM_LICENSE_PRIVATE_KEY is not a valid PEM private key.');
   process.exit(2);
