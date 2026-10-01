@@ -1,0 +1,48 @@
+{
+  "name": "sabermarko",
+  "productName": "SaberMarko POS",
+  "version": "1.0.0",
+  "description": "نظام نقاط بيع وإدارة محلات التجزئة والسوبر ماركت",
+  "main": "dist/main/index.js",
+  "author": "SaberMarko Software",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build:main": "node scripts/build-main.mjs",
+    "build:renderer": "vite build",
+    "build": "npm run typecheck && npm run build:main && npm run build:renderer",
+    "start": "electron .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "dist:linux": "npm run build && electron-builder --linux deb AppImage",
+    "dist:win": "npm run build && electron-builder --win nsis",
+    "license:keygen": "node tools/license/keygen.mjs",
+    "license:issue": "node tools/license/issue.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3"
+  },
+  "devDependencies": {
+    "@fontsource/ibm-plex-sans-arabic": "^5.3.0",
+    "@playwright/test": "^1.63.0",
+    "@tanstack/react-query": "^5.104.0",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "lucide-react": "^1.49.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.3",
+    "zod": "^4.6.5"
+  }
+}
