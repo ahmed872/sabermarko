@@ -96,6 +96,13 @@ export default function Settings() {
             <SettingRow title="تنبيه الصلاحية قبل (يوم)"><div style={{ width: 120 }}><NumberInput value={s['inventory.expiryAlertDays']} onChange={(v) => set('inventory.expiryAlertDays', v ?? 30)} /></div></SettingRow>
             <SettingRow title="اعتبار المنتج راكدًا إذا لم يُبع منذ (يوم)"><div style={{ width: 120 }}><NumberInput value={s['inventory.deadStockDays']} onChange={(v) => set('inventory.deadStockDays', v ?? 30)} /></div></SettingRow>
             <SettingRow title="اقتراحات الطلب تغطي (يوم)" desc="الكمية المقترحة تكفي البيع لهذه المدة بعد وصول البضاعة"><div style={{ width: 120 }}><NumberInput value={s['inventory.reorderCoverDays']} onChange={(v) => set('inventory.reorderCoverDays', v ?? 7)} /></div></SettingRow>
+            <div className="section-title mt">اقتراحات البيع والعروض الذكية</div>
+            <SettingRow title="فترة التحليل (يوم)" desc="المبيعات التي تُحسب منها سرعة الحركة"><div style={{ width: 120 }}><NumberInput value={s['intel.windowDays']} onChange={(v) => set('intel.windowDays', v ?? 30)} /></div></SettingRow>
+            <SettingRow title="المخزون الزائد إذا كان يكفي أكثر من (يوم)" desc="أو 3 أضعاف المعتاد لنفس التصنيف — أيهما أكبر"><div style={{ width: 120 }}><NumberInput value={s['intel.excessCoverDays']} onChange={(v) => set('intel.excessCoverDays', v ?? 60)} /></div></SettingRow>
+            <SettingRow title="الركود حسب إيقاع المنتج (×)" desc="يُعتبر راكدًا إذا توقف أكثر من هذا العدد من أضعاف معدله المعتاد"><div style={{ width: 120 }}><NumberInput value={s['intel.deadMultiplier']} onChange={(v) => set('intel.deadMultiplier', v ?? 3)} /></div></SettingRow>
+            <SettingRow title="أقل هامش ربح مسموح للعروض %" desc="لا يُقترح عرض يقل هامشه عن هذا"><div style={{ width: 120 }}><NumberInput value={s['intel.minMarginPct']} onChange={(v) => set('intel.minMarginPct', v ?? 8)} /></div></SettingRow>
+            <SettingRow title="أقصى خصم في العروض المقترحة %"><div style={{ width: 120 }}><NumberInput value={s['intel.maxDiscountPct']} onChange={(v) => set('intel.maxDiscountPct', v ?? 30)} /></div></SettingRow>
+            <SettingRow title="عدد الاقتراحات المعروضة"><div style={{ width: 120 }}><NumberInput value={s['intel.maxSuggestions']} onChange={(v) => set('intel.maxSuggestions', v ?? 5)} /></div></SettingRow>
             <SettingRow title="أقصى مدة للوردية قبل التنبيه (ساعة)"><div style={{ width: 120 }}><NumberInput value={s['shift.maxHours']} onChange={(v) => set('shift.maxHours', v ?? 14)} /></div></SettingRow>
           </div>
         )}

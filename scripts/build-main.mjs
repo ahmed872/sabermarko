@@ -18,5 +18,6 @@ const entries = [
   { entryPoints: ['src/preload/index.ts'], outfile: 'dist/preload/index.js' },
 ];
 if (process.env.BUILD_SAMPLE) entries.push({ entryPoints: ['scripts/sample-invoice.ts'], outfile: 'dist/sample/sample-invoice.js' });
+if (process.env.BUILD_TOOLS) entries.push({ entryPoints: ['scripts/seed-demo.ts'], outfile: 'dist/tools/seed-demo.js', external: ['better-sqlite3'] });
 
 for (const e of entries) await build({ ...common, ...e, ...(watch ? {} : {}) });

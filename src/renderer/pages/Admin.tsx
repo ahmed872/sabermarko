@@ -24,7 +24,7 @@ const ACTIONS: Record<string, string> = {
   'customer.adjust_balance': 'تعديل رصيد عميل', 'supplier.create': 'إضافة مورد', 'supplier.update': 'تعديل مورد', 'supplier.payment': 'سداد مورد', 'supplier.adjust_balance': 'تعديل رصيد مورد',
   'expense.create': 'تسجيل مصروف', 'expense.delete': 'حذف مصروف', 'user.create': 'إضافة مستخدم', 'user.update': 'تعديل مستخدم', 'user.password_change': 'تغيير كلمة المرور',
   'role.create': 'إضافة دور', 'role.update': 'تعديل صلاحيات', 'settings.update': 'تعديل الإعدادات', 'day.close': 'إغلاق يوم', 'license.activate': 'تفعيل الترخيص', 'backup.restore': 'استعادة نسخة احتياطية',
-  'promotion.create': 'إضافة عرض', 'promotion.update': 'تعديل عرض', 'promotion.delete': 'حذف عرض',
+  'promotion.create': 'إضافة عرض', 'promotion.approve_suggestion': 'اعتماد عرض مقترح', 'promotion.reject_suggestion': 'رفض عرض مقترح', 'promotion.update': 'تعديل عرض', 'promotion.delete': 'حذف عرض',
 };
 
 function describe(a: any): string {

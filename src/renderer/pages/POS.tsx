@@ -20,7 +20,7 @@ interface PProduct {
 interface Discount { type: 'amount' | 'percent'; value: number }
 interface Line { key: string; productId: number; unitId: number; qty: number; unitPrice?: number | null; discount?: Discount | null; product: PProduct }
 interface PricedLine { key?: string; productId: number; unitId: number; productName: string; unitName: string; qty: number; listPrice: number; unitPrice: number; gross: number; promoDiscount: number; promotionName: string | null; discount: number; invoiceDiscountShare: number; total: number; allowDecimal: boolean; stock: number; baseQty: number }
-interface Priced { lines: PricedLine[]; subtotal: number; promoDiscount: number; lineDiscount: number; invoiceDiscount: number; taxTotal: number; rounding: number; total: number; itemsCount: number; missingApprovals: string[] }
+interface Priced { promoHints?: string[]; lines: PricedLine[]; subtotal: number; promoDiscount: number; lineDiscount: number; invoiceDiscount: number; taxTotal: number; rounding: number; total: number; itemsCount: number; missingApprovals: string[] }
 
 let keySeq = 0;
 const newKey = () => `l${Date.now().toString(36)}${(keySeq++).toString(36)}`;
@@ -335,6 +335,7 @@ export default function POS() {
           })}
         </div>
         {quoteError && <div className="alert danger" style={{ margin: '0 14px 8px' }}>{quoteError}</div>}
+        {!!priced?.promoHints?.length && <div className="alert info small" style={{ margin: '0 14px 8px' }}>💡 العميل قريب من عرض: {priced.promoHints.join('، ')} — أضف المنتج الثاني ليُطبق العرض.</div>}
         <div className="cart-totals">
           <div className="tr"><span>الإجمالي قبل الخصم</span><span className="num">{money(priced?.subtotal ?? 0)}</span></div>
           {(priced?.promoDiscount ?? 0) + (priced?.lineDiscount ?? 0) + (priced?.invoiceDiscount ?? 0) > 0 && (

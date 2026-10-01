@@ -142,7 +142,9 @@ export function productMetrics(ctx: Ctx, opts: { windowDays?: number; asOf?: str
         sellableBefore += sells;
         atRisk += b.qty - sells;
       }
-      expiry = { batchQty: bs.reduce((a, b) => a + b.qty, 0), nearestDate: bs[0].expiry_date, daysLeft: daysBetween(to, bs[0].expiry_date), atRiskQty: Math.round(atRisk) };
+      // count products are rounded to whole units (no '97.4 pieces')
+      const risk = r.allow_decimal ? Math.round(atRisk) : Math.round(atRisk / 1000) * 1000;
+      expiry = { batchQty: bs.reduce((a, b) => a + b.qty, 0), nearestDate: bs[0].expiry_date, daysLeft: daysBetween(to, bs[0].expiry_date), atRiskQty: risk };
     }
     return {
       id: r.id, name: r.variant_name ? `${r.name} ${r.variant_name}` : r.name, categoryId: r.category_id, category: r.category, unitSymbol: r.unit_symbol, allowDecimal: !!r.allow_decimal,

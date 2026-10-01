@@ -45,6 +45,7 @@ function cur(ctx: Ctx) {
   return { code: getSetting(ctx.db, 'currency.code'), symbol: getSetting(ctx.db, 'currency.symbol'), digits: getSetting(ctx.db, 'ui.digits') };
 }
 const q = (m: number) => { const v = m / 1000; return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/\.?0+$/, ''); };
+const arDate = (iso: string) => { const [y, mo, d] = iso.split('-'); return `${d}/${mo}/${y}`; };
 
 function period(ctx: Ctx): string { return today(ctx).slice(0, 7); }
 
@@ -179,14 +180,15 @@ export function buildSuggestions(ctx: Ctx): Built[] {
       built.push({
         kind: 'expiry', productId: a.id, partnerId: null, verdict: sim.unsafe ? 'review' : 'good',
         score: 60 + 30 * (1 - Math.min(Math.max(e.daysLeft, 0), 60) / 60) + 10 * (lossIfExpired / maxStockValue),
-        payload: { title: titleOf(proposal, a.name), proposal, simulation: sim, reasons, goal: `بيع ${q(e.atRiskQty)} ${a.unitSymbol} قبل ${e.nearestDate} بدل خسارتها.`, verdictText: sim.unsafe ? VERDICT_TEXT.review : VERDICT_TEXT.good, rejected: [], history: historyLine('expiry') },
+        payload: { title: titleOf(proposal, a.name), proposal, simulation: sim, reasons, goal: `بيع ${q(e.atRiskQty)} ${a.unitSymbol} قبل ${arDate(e.nearestDate)} بدل خسارتها.`, verdictText: sim.unsafe ? VERDICT_TEXT.review : VERDICT_TEXT.good, rejected: [], history: historyLine('expiry') },
       });
       continue;
     }
 
     /* ---------------- slow / dead / excess: clear stock, protect margin */
     if (isClear && (a.marginPct ?? 0) > 0) {
-      const target = a.classes.includes('dead') ? a.stock : Math.max(0, a.stock - a.velocity * 30);
+      const rawTarget = a.classes.includes('dead') ? a.stock : Math.max(0, a.stock - a.velocity * 30);
+      const target = a.allowDecimal ? Math.round(rawTarget) : Math.floor(rawTarget / 1000) * 1000;
       if (target < unitStep(a)) continue;
       // best partner among fast movers: bought-together > same category > sensible gift price
       const partners = hot.filter((b) => b.id !== a.id).map((b) => {

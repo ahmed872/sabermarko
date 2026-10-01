@@ -83,6 +83,8 @@ function PromotionsTab() {
       case 'amount': return `خصم ${money(p.value)} على كل وحدة`;
       case 'bundle': return `${qty(p.min_qty)} بـ ${money(p.value)}`;
       case 'bxgy': return `اشترِ ${qty(p.min_qty)} واحصل على ${qty(p.get_qty)} مجانًا`;
+      case 'cross': return `اشترِ ${qty(p.min_qty)} واحصل على ${qty(p.reward_qty)} ${p.reward_product_name ?? ''} ${p.reward_type === 'percent' ? `بخصم ${p.value / 100}%` : 'مجانًا'}`;
+      case 'combo': return `مع ${p.reward_product_name ?? ''} بسعر ${money(p.value)}`;
     }
     return '';
   };
@@ -92,7 +94,7 @@ function PromotionsTab() {
       <div className="card">
         {!list.data?.length ? <Empty title="لا توجد عروض" /> : (
           <table className="table"><thead><tr><th>العرض</th><th>على</th><th>التفاصيل</th><th>من</th><th>إلى</th><th>الحالة</th></tr></thead>
-            <tbody>{list.data.map((p) => <tr key={p.id} className="clickable" onClick={() => setEdit(p)}><td className="bold">{p.name}</td><td>{p.product_name ?? `تصنيف: ${p.category_name}`}</td><td>{describe(p)}</td><td className="num small">{dateOnly(p.start_date)}</td><td className="num small">{dateOnly(p.end_date)}</td><td>{p.active ? <span className="badge success">مفعل</span> : <span className="badge">متوقف</span>}</td></tr>)}</tbody></table>
+            <tbody>{list.data.map((p) => <tr key={p.id} className={['cross', 'combo'].includes(p.type) ? '' : 'clickable'} onClick={() => !['cross', 'combo'].includes(p.type) && setEdit(p)}><td className="bold">{p.name}{p.suggestion_id ? <span className="badge primary" style={{ marginInlineStart: 6 }}>من الاقتراحات</span> : null}</td><td>{p.product_name ?? `تصنيف: ${p.category_name}`}</td><td>{describe(p)}</td><td className="num small">{dateOnly(p.start_date)}</td><td className="num small">{dateOnly(p.end_date)}</td><td>{p.active ? <span className="badge success">مفعل</span> : <span className="badge">متوقف</span>}{['cross', 'combo'].includes(p.type) && p.active ? <button className="btn ghost sm" onClick={(e) => { e.stopPropagation(); void api('promotions.save', { id: p.id, data: { name: p.name, type: p.type, productId: p.product_id, rewardProductId: p.reward_product_id, rewardQty: p.reward_qty, rewardType: p.reward_type, maxPerInvoice: p.max_per_invoice, minQty: p.min_qty, value: p.value, startDate: p.start_date, endDate: p.end_date, active: false } }).then(() => list.refetch()); }}>إيقاف</button> : null}</td></tr>)}</tbody></table>
         )}
       </div>
       {edit && <PromotionDialog promo={edit} onClose={() => { setEdit(null); void list.refetch(); }} />}

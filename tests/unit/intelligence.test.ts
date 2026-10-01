@@ -263,7 +263,7 @@ describe('suggest -> approve -> execute -> measure', () => {
     simulateDays(env, 14, () => [[[A, 2], [B, 1]], [[A, 2], [B, 1]], [[A, 2], [B, 1]], [[B, 3], [fillers[0], 2]]]);
     const r = promotionPerformance(env.ctx, promotionId)!;
     expect(r.uses).toBe(42);
-    expect(r.mainDuring.units).toBe(84_000);
+    expect(r.mainDuring!.units).toBe(84_000);
     expect(r.unitsUpliftPct).toBeGreaterThan(100);
     expect(r.stockReductionPct).toBeGreaterThan(50);
     expect(r.discountGiven).toBe(42 * egp(10));

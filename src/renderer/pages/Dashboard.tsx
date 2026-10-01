@@ -27,7 +27,7 @@ export default function Dashboard() {
   return (
     <div className="col gap-lg">
       <div className="row">
-        <div><h1>صباح الخير، {user?.fullName}</h1><div className="muted small">{settings['store.name']} — ملخص اليوم {d.data.scope === 'mine' ? '(مبيعاتك أنت)' : ''}</div></div>
+        <div><h1>{new Date().getHours() < 12 ? 'صباح الخير' : 'مساء الخير'}، {user?.fullName}</h1><div className="muted small">{settings['store.name']} — ملخص اليوم {d.data.scope === 'mine' ? '(مبيعاتك أنت)' : ''}</div></div>
         <div className="grow" />
         {can('pos.sell') && <Link className="btn primary lg" to="/pos"><ShoppingCart size={18} /> بيع جديد</Link>}
         {can('products.manage') && <Link className="btn lg" to="/products/new"><PackagePlus size={18} /> منتج جديد</Link>}
@@ -74,7 +74,7 @@ export default function Dashboard() {
           <div className="hint">{t.returns.count} مرتجع • خصومات {money(t.discounts)}{t.voids.count ? ` • ${t.voids.count} فاتورة ملغاة` : ''}</div>
         </div>
       </div>
-      {y && <div className="row small muted" style={{ marginTop: -8 }}><Delta now={t.netSales} before={y.netSales} /></div>}
+      {y && t.invoices > 0 && <div className="row small muted" style={{ marginTop: -8 }}><Delta now={t.netSales} before={y.netSales} /></div>}
 
       <MonthlyFocus compact />
 

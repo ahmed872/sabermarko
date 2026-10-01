@@ -1,0 +1,44 @@
+import { test, expect } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { go, launch, shot } from './helpers';
+
+test('demo store: dashboard, smart suggestions, approve an offer, POS applies it', async () => {
+  const userData = mkdtempSync(join(tmpdir(), 'sbm-demo-'));
+  execFileSync(process.execPath, [join(__dirname, '../../dist/tools/seed-demo.js'), userData]);
+  const { app, page } = await launch({ userData });
+  await page.getByRole('button', { name: 'الحاج محمود' }).click();
+  await page.locator('input[type=password]').fill('1234');
+  await page.getByRole('button', { name: /دخول/ }).click();
+  await expect(page.getByText('ماذا يحتاج المحل هذا الشهر؟')).toBeVisible();
+  await page.waitForTimeout(600);
+  await shot(page, '10-dashboard-demo');
+  await go(page, '/insights?tab=promos');
+  await expect(page.getByText('لماذا؟').first()).toBeVisible();
+  await shot(page, '11-insights-promos');
+  // approve the first non-review suggestion
+  const card = page.locator('.card', { has: page.locator('.badge.info, .badge.success') }).filter({ has: page.getByRole('button', { name: 'اعتماد العرض' }) }).first();
+  const title = (await card.locator('h3').innerText()).replace('💡 ', '');
+  await card.getByRole('button', { name: 'اعتماد العرض' }).click();
+  await expect(page.getByText('مراجعة واعتماد العرض')).toBeVisible();
+  await page.waitForTimeout(500);
+  await shot(page, '12-approve-dialog');
+  await page.locator('.modal-foot').getByRole('button', { name: /اعتماد/ }).click();
+  await expect(page.getByText('تم اعتماد العرض وتفعيله')).toBeVisible();
+  await expect(page.getByText('قرارات هذا الشهر')).toBeVisible();
+  await go(page, '/insights?tab=slow');
+  await expect(page.getByText(/أنت حابس حوالي/)).toBeVisible();
+  await shot(page, '13-insights-slow');
+  await go(page, '/insights?tab=classes');
+  await page.waitForTimeout(400);
+  await shot(page, '14-insights-classes');
+  await go(page, '/catalog');
+  await page.getByRole('button', { name: 'العروض' }).click();
+  await expect(page.getByText(title.slice(0, 12)).first()).toBeVisible();
+  await go(page, '/reports');
+  await page.waitForTimeout(500);
+  await shot(page, '15-reports');
+  await app.close();
+});
