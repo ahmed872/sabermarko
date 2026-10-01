@@ -1,0 +1,4 @@
+{
+  "_comment": "Public-key fingerprints of DEVELOPMENT signing keys. Their private keys were created in development/CI environments and must be treated as known. A release built with one of these keys would let anyone holding that dev key issue licenses, so the release guard refuses it. Generate your own key with `npm run license:keygen` on your own computer.",
+  "fingerprints": ["9c60:69ca:3b1c:fe32:8ee3:c0c6:1291:9a9b"]
+}

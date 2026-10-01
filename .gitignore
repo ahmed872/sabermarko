@@ -1,6 +1,6 @@
 node_modules/
-dist/
-release/
+/dist/
+/release/
 test-results/
 playwright-report/
 *.log
