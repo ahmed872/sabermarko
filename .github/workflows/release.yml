@@ -71,15 +71,17 @@ jobs:
           $fileVersion = (Get-Item $exe).VersionInfo.ProductVersion
           Write-Host "installed exe version: $fileVersion"
           if (-not $fileVersion.StartsWith($version)) { throw "installed exe version $fileVersion != package version $version" }
-          $shell = New-Object -ComObject WScript.Shell
+          # read the target straight from the .lnk bytes (WScript.Shell returns an empty target for the Arabic shortcut name)
           $roots = @("$env:APPDATA\Microsoft\Windows\Start Menu\Programs", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs", [Environment]::GetFolderPath('Desktop'), "$env:PUBLIC\Desktop") | Where-Object { $_ -and (Test-Path $_) }
           $all = @(foreach ($r in $roots) { Get-ChildItem -LiteralPath $r -Filter *.lnk -Recurse -ErrorAction SilentlyContinue })
-          $ours = @($all | Where-Object { $shell.CreateShortcut($_.FullName).TargetPath -like '*\SaberMarko POS.exe' })
-          foreach ($l in $ours) { Write-Host "shortcut: $($l.FullName) -> $($shell.CreateShortcut($l.FullName).TargetPath)" }
-          if ($ours.Count -lt 1) {
-            Write-Host 'all shortcuts found:'; foreach ($l in $all) { Write-Host " $($l.FullName) -> $($shell.CreateShortcut($l.FullName).TargetPath)" }
-            throw 'no Start Menu / Desktop shortcut points to the installed exe'
-          }
+          $pointsToApp = { param($f) $b = [IO.File]::ReadAllBytes($f); $u = [Text.Encoding]::Unicode
+            ($u.GetString($b) + ' ' + $u.GetString($b, 1, $b.Length - 1) + ' ' + [Text.Encoding]::ASCII.GetString($b)) -match 'SaberMarko POS\.exe' }
+          $ours = @($all | Where-Object { & $pointsToApp $_.FullName })
+          foreach ($l in $ours) { Write-Host "shortcut -> app: $($l.FullName)" }
+          $desktop = @($ours | Where-Object { $_.FullName -like "$([Environment]::GetFolderPath('Desktop'))*" })
+          $startMenu = @($ours | Where-Object { $_.FullName -like '*\Start Menu\*' })
+          if ($desktop.Count -lt 1) { throw 'no Desktop shortcut points to the installed exe' }
+          if ($startMenu.Count -lt 1) { throw 'no Start Menu shortcut points to the installed exe' }
 
           # launch the installed app with a throw-away data folder; it must start, create its database and log, and keep running
           $ud = Join-Path $env:RUNNER_TEMP 'sbm-launch'
