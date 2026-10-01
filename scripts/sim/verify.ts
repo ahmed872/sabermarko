@@ -309,7 +309,7 @@ const report = { generatedFrom: dbFile, ok: failed.length === 0, checks, monthly
   products: one<{ n: number }>('SELECT COUNT(*) AS n FROM products').n,
   auditRows: one<{ n: number }>('SELECT COUNT(*) AS n FROM audit_log').n,
 } };
-writeFileSync(join(OUT, args.includes('--db') ? 'verify-report-restored.json' : 'verify-report.json'), JSON.stringify(report, null, 1));
+writeFileSync(join(OUT, args.includes('--report') ? args[args.indexOf('--report') + 1] : 'verify-report.json'), JSON.stringify(report, null, 1));
 for (const c of checks) console.log(`${c.ok ? 'PASS' : 'FAIL'}  ${c.name}  (${c.checked})${c.ok ? '' : ` — ${c.failures} failures: ${JSON.stringify(c.sample).slice(0, 400)}`}`);
 console.log(failed.length ? `\n${failed.length} CHECKS FAILED` : `\nALL ${checks.length} CHECKS PASSED`);
 db.close();

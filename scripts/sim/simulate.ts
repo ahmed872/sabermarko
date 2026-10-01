@@ -489,7 +489,11 @@ function promotionCycle(dayIdx: number) {
   for (const s of list) {
     const verdict = s.verdict; const kind = s.kind;
     try {
-      if ((verdict === 'good' && approved < 3) || (verdict === 'ok' && approved < 4 && !decisions.some((d) => d.verdict === 'ok' && d.decision === 'approved'))) {
+      // owner policy: at most one (multi-day) expiry offer a month, plus the safe pairing / quantity / clearance
+      // offers on the screen; offers flagged for review are rejected
+      const expiryTaken = decisions.some((d) => d.kind === 'expiry' && d.decision === 'approved');
+      const worthIt = kind === 'expiry' ? !expiryTaken && (s.payload?.proposal?.days ?? 1) >= 2 : true;
+      if (worthIt && (verdict === 'good' || verdict === 'ok') && approved < 4) {
         approveSuggestion(owner, { id: s.id }); approved++; decisions.push({ id: s.id, kind, verdict, decision: 'approved', title: s.title ?? s.payload?.title });
       } else if (verdict === 'review') {
         rejectSuggestion(owner, { id: s.id, note: 'الهامش غير مناسب حاليًا' }); decisions.push({ id: s.id, kind, verdict, decision: 'rejected' });

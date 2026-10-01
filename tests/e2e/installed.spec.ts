@@ -22,8 +22,9 @@ test(`installed app — phase ${phase}`, async () => {
     await addProduct(page, { name: 'عصير مانجو', price: '12', cost: '9', qty: '30', barcode: '111222333' });
     await sellOne(page, '111222333', '20');
     await go(page, '/backup');
-    await page.getByRole('button', { name: /نسخة احتياطية الآن/ }).click();
-    await expect(page.getByText('تم إنشاء النسخة الاحتياطية بنجاح')).toBeVisible();
+    await page.getByRole('button', { name: /إنشاء نسخة الآن/ }).click();
+    await expect(page.getByText('تم إنشاء النسخة الاحتياطية والتحقق منها بنجاح')).toBeVisible();
+    await expect(page.getByText('الحالة: سليمة وتم التحقق منها')).toBeVisible();
     await shot(page, '20-installed-first');
   } else if (phase === 'restart') {
     // data survived the restart; make a second sale, then restore the backup taken before it
@@ -34,9 +35,13 @@ test(`installed app — phase ${phase}`, async () => {
     await go(page, '/products');
     await expect(page.locator('tr', { hasText: 'عصير مانجو' })).toContainText('28');
     await go(page, '/backup');
-    await page.locator('tr', { hasText: 'يدوي' }).first().getByRole('button', { name: 'استعادة' }).click();
-    await page.getByText('أفهم ذلك وأريد المتابعة').click();
-    await page.getByRole('button', { name: 'استعادة الآن' }).click();
+    await page.getByRole('button', { name: /استعادة نسخة/ }).click();
+    await page.locator('.modal button', { hasText: 'يدوية' }).first().click();
+    await expect(page.getByText(/تم فحص الملف: سليم/)).toBeVisible();
+    await page.getByText('فهمت وأريد استعادة هذه النسخة').click();
+    await page.getByRole('button', { name: /استعادة الآن/ }).click();
+    await expect(page.getByText('تمت الاستعادة والتحقق من البيانات بنجاح')).toBeVisible();
+    await page.getByRole('button', { name: 'متابعة لتسجيل الدخول' }).click();
     await expect(page.getByText('تسجيل الدخول').or(page.getByText('سجّل الدخول للمتابعة'))).toBeVisible();
     await loginAs(page, 'أحمد المدير', '1234');
     await go(page, '/products');
