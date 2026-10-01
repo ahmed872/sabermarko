@@ -109,6 +109,23 @@ describe('dynamic product classification', () => {
 });
 
 describe('promotion engine safety and profitability', () => {
+  it('a product whose last offer ended recently without results is not offered again (found by the one-year simulation)', () => {
+    const { env, A } = scenarioStore();
+    expect(buildSuggestions(env.ctx).find((x) => x.productId === A)).toBeTruthy();
+    // the shop then ran a 20-day offer on A during which A sold nothing (a failed offer)
+    const t0 = env.clock.t.getTime();
+    const iso = (ms: number) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    env.ctx.db.prepare(`INSERT INTO promotions(name, type, product_id, min_qty, value, start_date, end_date, active, created_at) VALUES ('عرض سابق', 'percent', ?, 2000, 500, ?, ?, 1, ?)`)
+      .run(A, iso(t0 + 5 * DAY), iso(t0 + 25 * DAY), `${iso(t0 + 5 * DAY)} 09:00:00`);
+    env.clock.t = new Date(t0 + 30 * DAY);
+    const pid = (env.ctx.db.prepare('SELECT max(id) AS id FROM promotions').get() as { id: number }).id;
+    expect((promotionPerformance(env.ctx, pid, { skipPerm: true }) as any).verdict).toBe('weak');
+    expect(buildSuggestions(env.ctx).find((x) => x.productId === A && x.kind !== 'expiry')).toBeUndefined();
+    // after the 60-day cool-down it may be suggested again
+    env.clock.t = new Date(t0 + 100 * DAY);
+    expect(buildSuggestions(env.ctx).some((x) => x.productId === A && x.kind !== 'expiry')).toBe(true);
+  });
+
   it('spec §28/§7: suggests a slow+fast pairing with full before/after economics', () => {
     const { env, A, B } = scenarioStore();
     const s = buildSuggestions(env.ctx).find((x) => x.productId === A)!;

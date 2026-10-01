@@ -159,6 +159,15 @@ export function buildSuggestions(ctx: Ctx): Built[] {
   };
   const historyPenalty = (kind: string) => { const s = stats[kind]; return s && s.count >= 2 && s.gpChangePct !== null && s.gpChangePct < -20 ? 15 : 0; };
   const built: Built[] = [];
+  // Feedback loop per product: an offer that ended in the last 60 days without a clear result is not
+  // proposed again yet (a dead product would otherwise get the same failed offer every month).
+  // Expiry offers are exempt: they prevent waste, not chase sales.
+  const t = today(ctx);
+  const cooldown = new Set<number>();
+  for (const r of db.prepare(`SELECT id, product_id FROM promotions WHERE product_id IS NOT NULL AND end_date IS NOT NULL AND end_date < @t AND end_date >= @from`).all({ t, from: addDays(t, -60) }) as { id: number; product_id: number }[]) {
+    const perf = promotionPerformance(ctx, r.id, { skipPerm: true }) as { verdict?: string } | null;
+    if (perf?.verdict === 'weak') cooldown.add(r.product_id);
+  }
   const maxStockValue = Math.max(1, ...metricsList.map((m) => m.stockValue));
   const pairs = basketPairs(ctx);
   const assoc = (a: number, b: number) => pairs.pairs.find((p) => (p.a === a && p.b === b) || (p.a === b && p.b === a));
@@ -203,6 +212,8 @@ export function buildSuggestions(ctx: Ctx): Built[] {
       });
       continue;
     }
+
+    if (cooldown.has(a.id)) continue;
 
     /* ---------------- slow / dead / excess: clear stock, protect margin */
     if (isClear && (a.marginPct ?? 0) > 0) {
