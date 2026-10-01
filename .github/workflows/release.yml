@@ -88,12 +88,14 @@ jobs:
           $env:SBM_USER_DATA = $ud
           $app = Start-Process $exe -PassThru
           $deadline = (Get-Date).AddSeconds(60)
-          while ((Get-Date) -lt $deadline -and -not (Select-String -Path "$ud\logs\*" -Pattern "app started v$version \(win32\)" -Quiet -ErrorAction SilentlyContinue)) { Start-Sleep -Seconds 2 }
-          if (-not (Select-String -Path "$ud\logs\*" -Pattern "app started v$version \(win32\)" -Quiet -ErrorAction SilentlyContinue)) { Get-ChildItem -Recurse $ud -ErrorAction SilentlyContinue; throw 'the installed app did not log a successful start within 60 s' }
+          # the logs folder appears a moment after start: only search it once it exists
+          $started = { (Test-Path "$ud\logs") -and [bool](Get-ChildItem "$ud\logs" -File | Select-String -Pattern "app started v$version \(win32\)" -Quiet) }
+          while ((Get-Date) -lt $deadline -and -not (& $started)) { Start-Sleep -Seconds 2 }
+          if (-not (& $started)) { if (Test-Path $ud) { Get-ChildItem -Recurse $ud }; throw 'the installed app did not log a successful start within 60 s' }
           Start-Sleep -Seconds 10
           if ($app.HasExited) { throw "the installed app exited by itself (code $($app.ExitCode))" }
           if (-not (Test-Path "$ud\data\store.db")) { throw 'the app did not create its database' }
-          Get-Content "$ud\logs\*" | Select-Object -First 20
+          Get-ChildItem "$ud\logs" -File | Get-Content | Select-Object -First 20
           Get-Process | Where-Object { $_.Path -eq $exe } | Stop-Process -Force
           Start-Sleep -Seconds 3
           Remove-Item Env:SBM_USER_DATA
