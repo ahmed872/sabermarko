@@ -72,6 +72,19 @@ describe('licensing (spec §58-60)', () => {
     expect(m.status()).toMatchObject({ state: 'tampered', canOperate: false });
   });
 
+  it('a single damaged copy is healed from the valid ones (no false lock-out)', () => {
+    const clock = { t: start };
+    const { store, storage } = memStorage();
+    manager(storage, clock);
+    clock.t = start + 3 * DAY;
+    store[0] = 'corrupt';
+    const rec = store[1] as SealedRecord;
+    store[2] = { data: { ...rec.data, trialStart: start + 10 * DAY }, seal: rec.seal }; // edited copy
+    const m = manager(storage, clock);
+    expect(m.status()).toMatchObject({ state: 'trial', daysLeft: 17 });
+    expect(store[0]).not.toBe('corrupt'); // rewritten from the valid record
+  });
+
   it('a record sealed for another machine is rejected', () => {
     const clock = { t: start };
     const { store, storage } = memStorage();

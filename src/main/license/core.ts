@@ -140,11 +140,15 @@ export class LicenseManager {
   load(): void {
     const recs = this.storage.readAll();
     const valid: StoredState[] = [];
+    let invalid = 0;
     for (const r of recs) {
       if (r === null) continue;
-      if (r === 'corrupt' || !verifySeal(r, this.machineCode)) { this.tampered = true; continue; }
+      if (r === 'corrupt' || !verifySeal(r, this.machineCode)) { invalid++; continue; }
       valid.push(r.data);
     }
+    // One damaged copy (disk glitch, partial write) is healed from the valid ones: it cannot extend a
+    // trial because the EARLIEST valid start wins. Only when every copy fails its seal is it tampering.
+    this.tampered = invalid > 0 && valid.length === 0;
     const now = this.clock();
     if (!valid.length) {
       if (this.tampered) {

@@ -7,7 +7,7 @@ import {
 import { api, apiApproved } from '../lib/api';
 import { useApp } from '../lib/app';
 import { METHOD_LABEL, money, qty as fmtQty, dateTime } from '../lib/format';
-import { Empty, Field, Modal, MoneyInput, NumberInput, QtyInput, Segmented, useAction, useConfirm, useToast } from '../components/ui';
+import { Empty, Field, Loading, Modal, MoneyInput, NumberInput, QtyInput, Segmented, useAction, useConfirm, useToast } from '../components/ui';
 import { normalizeArabic } from '../../shared/arabic';
 
 /* ------------------------------------------------------------------ types */
@@ -103,7 +103,7 @@ export default function POS() {
   }, []);
 
   /** Decide how to add a product: variants picker, weight dialog, or directly. */
-  const pick = useCallback(async (p: PProduct, opts: { fromScan?: boolean } = {}) => {
+  const pick = useCallback(async (p: PProduct) => {
     if (p.matchedQty || p.matchedPrice) {
       // scale label: weight in grams, or price
       const base = p.units.find((u) => u.unit_id === p.base_unit_id)!;
@@ -116,7 +116,6 @@ export default function POS() {
     }
     if (p.is_weighted) { setDialog({ kind: 'weight', data: p }); return; }
     addLine(p, p.matchedUnitId);
-    if (opts.fromScan) setQ('');
   }, [addLine]);
 
   const onSearchEnter = async () => {
@@ -124,8 +123,10 @@ export default function POS() {
     if (!term) { if (lines.length) setDialog({ kind: 'pay' }); return; }
     try {
       const r = await api<{ exact: boolean; items: PProduct[] }>('pos.search', { q: term, limit: 20 });
-      if (r.exact && r.items.length === 1) { await pick(r.items[0], { fromScan: true }); setQ(''); return; }
-      if (r.items.length === 1) { await pick(r.items[0]); setQ(''); return; }
+      // only clear the box if it still holds this term: a fast scanner may already be typing the next barcode
+      const clear = () => setQ((cur) => (cur.trim() === term ? '' : cur));
+      if (r.exact && r.items.length === 1) { await pick(r.items[0]); clear(); return; }
+      if (r.items.length === 1) { await pick(r.items[0]); clear(); return; }
       if (!r.items.length) toast(`لا يوجد منتج بالاسم أو الكود "${term}"`, 'error');
     } catch (e) { toast((e as Error).message, 'error'); }
   };
@@ -252,6 +253,8 @@ export default function POS() {
 
   const selLine = lines.find((l) => l.key === selected) ?? null;
 
+  // never show a usable sales screen before we know whether a shift is open
+  if (settings['sales.requireShift'] && !shift.isFetched) return <Loading />;
   if (needShift) return <OpenShift onOpened={() => { void shift.refetch(); focusSearch(); }} />;
 
   return (
@@ -479,12 +482,12 @@ function LineDialog({ line, priced, focus, onClose, onSave, onRemove }: { line: 
   const list = unitPriceOf(line.product, unit);
   const [price, setPrice] = useState<number | null>(line.unitPrice ?? (unitId === line.unitId ? priced?.listPrice ?? list : list));
   const [dType, setDType] = useState<'amount' | 'percent'>(line.discount?.type ?? 'amount');
-  const [dVal, setDVal] = useState<number | null>(line.discount ? (line.discount.type === 'amount' ? line.discount.value : line.discount.value * 100) : null);
+  const [dVal, setDVal] = useState<number | null>(line.discount ? line.discount.value : null);
   const canPrice = can('pos.price_override');
   const gross = Math.round(((price ?? 0) * (q ?? 0)) / 1000);
   const submit = () => {
     if (!q || q <= 0) return;
-    const disc: Discount | null = dVal && dVal > 0 ? { type: dType, value: dType === 'amount' ? dVal : dVal / 100 } : null;
+    const disc: Discount | null = dVal && dVal > 0 ? { type: dType, value: dType === 'percent' ? Math.min(dVal, 100) : dVal } : null;
     onSave({ unitId, qty: q, unitPrice: price !== null && price !== list ? price : null, discount: disc });
   };
   return (
@@ -507,8 +510,10 @@ function LineDialog({ line, priced, focus, onClose, onSave, onRemove }: { line: 
         {line.product.allow_discount ? (
           <Field label="خصم على الصنف">
             <div className="row">
-              <Segmented value={dType} onChange={setDType} options={[{ value: 'amount', label: 'مبلغ' }, { value: 'percent', label: 'نسبة %' }]} />
-              <NumberInput autoFocus={focus === 'discount'} value={dVal} allowEmpty onChange={setDVal} suffix={dType === 'percent' ? '%' : undefined} placeholder="0" />
+              <Segmented value={dType} onChange={(t) => { setDType(t); setDVal(null); }} options={[{ value: 'amount', label: 'مبلغ' }, { value: 'percent', label: 'نسبة %' }]} />
+              {dType === 'percent'
+                ? <NumberInput autoFocus={focus === 'discount'} value={dVal} allowEmpty onChange={setDVal} suffix="%" placeholder="0" />
+                : <MoneyInput autoFocus={focus === 'discount'} value={dVal} allowEmpty onChange={setDVal} placeholder="0" />}
             </div>
           </Field>
         ) : <div className="muted small">هذا المنتج لا يقبل خصمًا.</div>}
@@ -521,15 +526,16 @@ function LineDialog({ line, priced, focus, onClose, onSave, onRemove }: { line: 
 
 function DiscountDialog({ title, base, value, onClose, onSave }: { title: string; base: number; value: Discount | null; onClose: () => void; onSave: (d: Discount | null) => void }) {
   const [type, setType] = useState<'amount' | 'percent'>(value?.type ?? 'amount');
-  const [v, setV] = useState<number | null>(value ? (value.type === 'amount' ? value.value : value.value * 100) : null);
-  const amount = !v ? 0 : type === 'amount' ? Math.min(v, base) : Math.round((base * Math.min(v / 100, 100)) / 100);
-  const save = () => onSave(v && v > 0 ? { type, value: type === 'amount' ? v : v / 100 } : null);
+  // amount: minor units; percent: plain percent (25 = 25%)
+  const [v, setV] = useState<number | null>(value ? value.value : null);
+  const amount = !v ? 0 : type === 'amount' ? Math.min(v, base) : Math.round((base * Math.min(v, 100)) / 100);
+  const save = () => onSave(v && v > 0 ? { type, value: type === 'percent' ? Math.min(v, 100) : v } : null);
   return (
     <Modal title={title} size="sm" onClose={onClose} footer={<><button className="btn" onClick={() => onSave(null)}>إزالة الخصم</button><div className="grow" /><button className="btn primary" onClick={save}>تطبيق</button></>}>
       <form className="col" onSubmit={(e) => { e.preventDefault(); save(); }}>
         <Segmented value={type} onChange={(t) => { setType(t); setV(null); }} options={[{ value: 'amount', label: 'مبلغ' }, { value: 'percent', label: 'نسبة %' }]} />
         {type === 'amount' ? <MoneyInput className="lg" autoFocus value={v} onChange={setV} allowEmpty /> : <NumberInput className="lg" autoFocus value={v} onChange={setV} allowEmpty suffix="%" />}
-        <div className="row wrap gap-sm">{(type === 'percent' ? [5, 10, 15, 20] : []).map((p) => <button type="button" key={p} className="btn sm" onClick={() => setV(p * 100)}>{p}%</button>)}</div>
+        <div className="row wrap gap-sm">{(type === 'percent' ? [5, 10, 15, 20] : []).map((p) => <button type="button" key={p} className="btn sm" onClick={() => setV(p)}>{p}%</button>)}</div>
         <div className="alert info">قيمة الخصم: <b className="num">{money(amount)}</b> من {money(base)}</div>
         <button type="submit" hidden />
       </form>

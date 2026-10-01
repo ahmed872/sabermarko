@@ -1,35 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
-import { go, launch, shot } from './helpers';
-
-async function setup(page: Page) {
-  await page.getByRole('button', { name: /التالي/ }).click();
-  await page.getByPlaceholder('مثال: سوبر ماركت البركة').fill('سوبر ماركت البركة');
-  await page.locator('input[dir="ltr"]').first().fill('01012345678');
-  await page.getByRole('button', { name: /التالي/ }).click();
-  await page.getByRole('button', { name: /التالي/ }).click();
-  const inputs = page.locator('.auth-card input');
-  await inputs.nth(0).fill('أحمد المدير');
-  await inputs.nth(1).fill('admin');
-  await inputs.nth(2).fill('1234');
-  await inputs.nth(3).fill('1234');
-  await page.getByRole('button', { name: /التالي/ }).click();
-  await page.getByRole('button', { name: 'ابدأ استخدام البرنامج' }).click();
-  await expect(page.getByText('صباح الخير، أحمد المدير')).toBeVisible();
-}
-
-async function addProduct(page: Page, p: { name: string; price: string; cost: string; qty: string; unit?: string; barcode?: string; fav?: boolean }) {
-  await go(page, '/products/new');
-  await page.locator('#pname').fill(p.name);
-  if (p.unit) await page.locator('select').nth(1).selectOption({ label: p.unit });
-  const money = page.locator('input.num-input');
-  await money.nth(0).fill(p.price);
-  await money.nth(1).fill(p.cost);
-  if (p.barcode) await money.nth(2).fill(p.barcode);
-  await money.nth(4).fill(p.qty);
-  if (p.fav) await page.locator('.switch').first().click();
-  await page.getByRole('button', { name: 'حفظ', exact: true }).click();
-  await expect(page.locator('.page-header h1')).toContainText(p.name);
-}
+import { test, expect } from '@playwright/test';
+import { addProduct, go, launch, setup, shot } from './helpers';
 
 test('setup → products → shift → sale → invoice', async () => {
   const { app, page } = await launch();

@@ -53,9 +53,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     can: (p) => !!user && hasPermission(user.permissions, p),
     feature: (k) => !!settings[`features.${k}` as keyof StoreSettings],
     refresh,
-    setSession: (u, s) => { if (s) applyDisplay(s); setBoot((b) => (b ? { ...b, user: u, settings: s ?? b.settings } : b)); qc.clear(); },
+    // every login starts at the home screen (cashiers are redirected to the POS from there)
+    setSession: (u, s) => { if (s) applyDisplay(s); window.location.hash = '#/'; setBoot((b) => (b ? { ...b, user: u, settings: s ?? b.settings } : b)); qc.clear(); },
     setSettings: (s) => { applyDisplay(s); setBoot((b) => (b ? { ...b, settings: s } : b)); },
-    logout: async () => { await api('auth.logout'); qc.clear(); await refresh(); },
+    logout: async () => { await api('auth.logout'); window.location.hash = '#/'; qc.clear(); await refresh(); },
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

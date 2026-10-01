@@ -1,7 +1,7 @@
 import { AppError } from '../../shared/errors';
 import { normalizeArabic } from '../../shared/arabic';
 import { partyInput, paymentInput, type PartyInput } from '../../shared/schemas';
-import { type Ctx, audit, docNo, requirePerm, requirePermOrApproval, today, ts, tx } from './context';
+import { type Ctx, audit, can, docNo, requirePerm, requirePermOrApproval, today, ts, tx } from './context';
 import { addCashMovement, expectedCash, shiftForCash } from './shifts';
 
 type Party = 'customer' | 'supplier';
@@ -65,6 +65,7 @@ export function saveParty(ctx: Ctx, party: Party, id: number | null, raw: PartyI
 
 export function listParties(ctx: Ctx, party: Party, opts: { q?: string; withBalance?: boolean; includeInactive?: boolean; limit?: number } = {}) {
   if (party === 'supplier') requirePerm(ctx, 'purchases.view');
+  else if (!can(ctx, 'customers.manage') && !can(ctx, 'pos.sell') && !can(ctx, 'reports.view')) requirePerm(ctx, 'customers.manage');
   const conds: string[] = [];
   const params: Record<string, unknown> = {};
   if (!opts.includeInactive) conds.push('t.active = 1');
@@ -83,6 +84,7 @@ export function listParties(ctx: Ctx, party: Party, opts: { q?: string; withBala
 
 export function getParty(ctx: Ctx, party: Party, id: number): any {
   if (party === 'supplier') requirePerm(ctx, 'purchases.view');
+  else if (!can(ctx, 'customers.manage') && !can(ctx, 'pos.sell') && !can(ctx, 'reports.view')) requirePerm(ctx, 'customers.manage');
   const row = ctx.db.prepare(`SELECT * FROM ${TABLE[party]} WHERE id = ?`).get(id) as Record<string, any> | undefined;
   if (!row) throw new AppError('NOT_FOUND');
   const ledger = ctx.db.prepare(

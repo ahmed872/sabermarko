@@ -1,0 +1,53 @@
+appId: com.sabermarko.pos
+productName: SaberMarko POS
+copyright: Copyright © 2026 SaberMarko Software
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/main/**
+  - dist/preload/**
+  - dist/renderer/**
+  - package.json
+  - "!**/*.map"
+  - "!dist/sample/**"
+  - "!dist/tools/**"
+asar: true
+asarUnpack:
+  - node_modules/better-sqlite3/**
+# better-sqlite3 ships N-API prebuilds for every platform: no native rebuild needed
+npmRebuild: false
+buildDependenciesFromSource: false
+extraMetadata:
+  main: dist/main/index.js
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  artifactName: SaberMarko-POS-Setup-${version}.${ext}
+  # icon + version metadata are written into the exe (needs wine when cross-building from Linux).
+  # Code signing happens automatically when CSC_LINK / CSC_KEY_PASSWORD (vendor certificate) are set.
+  signAndEditExecutable: true
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: سابر ماركو
+  uninstallDisplayName: SaberMarko POS
+  # store data (database, backups, license) is NEVER deleted on uninstall
+  deleteAppDataOnUninstall: false
+  installerLanguages: [ar_SA, en_US]
+  language: "1025"
+linux:
+  target: [deb, AppImage]
+  icon: build/icon.png
+  category: Office
+  maintainer: SaberMarko Software <support@sabermarko.local>
+  synopsis: نظام نقاط بيع وإدارة محلات التجزئة
+  artifactName: SaberMarko-POS-${version}-${arch}.${ext}
+deb:
+  depends: [libgtk-3-0, libnotify4, libnss3, libxss1, libxtst6, xdg-utils, libatspi2.0-0, libuuid1, libsecret-1-0]

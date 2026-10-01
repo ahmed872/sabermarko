@@ -35,7 +35,7 @@ export const ERROR_MESSAGES = {
   DISCOUNT_TOO_LARGE: 'الخصم أكبر من الحد المسموح لك ({max}%).',
   DISCOUNT_EXCEEDS_TOTAL: 'الخصم أكبر من قيمة الفاتورة.',
   PRICE_BELOW_COST: 'سعر البيع أقل من التكلفة.',
-  SHIFT_REQUIRED: 'يجب فتح وردية قبل البيع.',
+  SHIFT_REQUIRED: 'يجب فتح وردية (درج النقدية) أولًا لإتمام هذه العملية.',
   SHIFT_ALREADY_OPEN: 'لديك وردية مفتوحة بالفعل.',
   SHIFT_NOT_OPEN: 'لا توجد وردية مفتوحة.',
   SHIFT_CLOSED: 'هذه الوردية مغلقة.',

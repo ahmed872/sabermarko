@@ -6,7 +6,6 @@ export const PERMISSIONS = {
   'pos.credit_sale': 'البيع الآجل',
   'pos.void': 'إلغاء فاتورة',
   'pos.return': 'عمل مرتجع بيع',
-  'pos.open_drawer': 'فتح درج النقدية بدون بيع',
   'pos.negative_stock': 'البيع بدون رصيد كافٍ',
   'sales.view': 'عرض الفواتير',
   'sales.view_all': 'عرض فواتير كل الكاشير',
@@ -48,7 +47,7 @@ export type Permission = keyof typeof PERMISSIONS;
 export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
 
 export const PERMISSION_GROUPS: { label: string; keys: Permission[] }[] = [
-  { label: 'نقطة البيع', keys: ['pos.sell', 'pos.price_override', 'pos.discount', 'pos.discount_large', 'pos.credit_sale', 'pos.void', 'pos.return', 'pos.open_drawer', 'pos.negative_stock', 'sales.view', 'sales.view_all', 'quotations.manage'] },
+  { label: 'نقطة البيع', keys: ['pos.sell', 'pos.price_override', 'pos.discount', 'pos.discount_large', 'pos.credit_sale', 'pos.void', 'pos.return', 'pos.negative_stock', 'sales.view', 'sales.view_all', 'quotations.manage'] },
   { label: 'المنتجات والمخزون', keys: ['products.view', 'products.manage', 'products.edit_price', 'products.edit_cost', 'products.delete', 'inventory.view', 'inventory.adjust', 'inventory.stocktake', 'inventory.transfer'] },
   { label: 'المشتريات والموردون', keys: ['purchases.view', 'purchases.manage', 'purchase_orders.manage', 'suppliers.manage', 'suppliers.pay'] },
   { label: 'العملاء والمالية', keys: ['customers.manage', 'customers.collect', 'customers.adjust_balance', 'expenses.manage', 'cash.manage', 'shifts.close_others', 'shifts.view_all', 'day.close'] },
