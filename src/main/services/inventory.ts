@@ -321,7 +321,7 @@ export function startStocktake(ctx: Ctx, input: { locationId?: number | null; ca
   });
 }
 
-export function getStocktake(ctx: Ctx, id: number, opts: { q?: string; onlyDiff?: boolean; onlyUncounted?: boolean } = {}) {
+export function getStocktake(ctx: Ctx, id: number, opts: { q?: string; onlyDiff?: boolean; onlyUncounted?: boolean } = {}): any {
   requirePerm(ctx, 'inventory.stocktake');
   const st = ctx.db.prepare(
     `SELECT s.*, l.name AS location_name, u.full_name AS created_by_name FROM stocktakes s

@@ -81,7 +81,7 @@ export function listParties(ctx: Ctx, party: Party, opts: { q?: string; withBala
   return rows;
 }
 
-export function getParty(ctx: Ctx, party: Party, id: number) {
+export function getParty(ctx: Ctx, party: Party, id: number): any {
   if (party === 'supplier') requirePerm(ctx, 'purchases.view');
   const row = ctx.db.prepare(`SELECT * FROM ${TABLE[party]} WHERE id = ?`).get(id) as Record<string, any> | undefined;
   if (!row) throw new AppError('NOT_FOUND');

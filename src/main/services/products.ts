@@ -245,7 +245,7 @@ export function toggleFavorite(ctx: Ctx, id: number, fav: boolean) {
   return { ok: true };
 }
 
-export function getProduct(ctx: Ctx, id: number) {
+export function getProduct(ctx: Ctx, id: number): any {
   requirePerm(ctx, 'products.view');
   const p = ctx.db.prepare(
     `SELECT p.*, c.name AS category_name, b.name AS brand_name, g.name AS group_name, u.name AS unit_name, u.symbol AS unit_symbol,

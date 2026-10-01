@@ -129,7 +129,7 @@ export function checkout(ctx: Ctx, raw: CheckoutInput) {
   });
 }
 
-export function getSale(ctx: Ctx, id: number) {
+export function getSale(ctx: Ctx, id: number): any {
   const user = requireUser(ctx);
   const sale = ctx.db.prepare(
     `SELECT s.*, u.full_name AS cashier_name, c.name AS customer_name, c.phone AS customer_phone, c.balance AS customer_balance,
@@ -182,7 +182,7 @@ export function listSales(ctx: Ctx, opts: { from: string; to: string; q?: string
   return { rows, total: agg.count, sum: agg.total, page, pageSize };
 }
 
-export function findSaleByNo(ctx: Ctx, invoiceNo: string) {
+export function findSaleByNo(ctx: Ctx, invoiceNo: string): any {
   const row = ctx.db.prepare('SELECT id FROM sales WHERE invoice_no = ?').get(String(invoiceNo).trim()) as { id: number } | undefined;
   if (!row) throw new AppError('NOT_FOUND');
   return getSale(ctx, row.id);
@@ -306,7 +306,7 @@ export function createReturn(ctx: Ctx, raw: ReturnInput) {
   });
 }
 
-export function getReturn(ctx: Ctx, id: number) {
+export function getReturn(ctx: Ctx, id: number): any {
   requireUser(ctx);
   const r = ctx.db.prepare(
     `SELECT r.*, s.invoice_no, u.full_name AS user_name, c.name AS customer_name FROM sale_returns r JOIN sales s ON s.id = r.sale_id
@@ -386,7 +386,7 @@ export function createQuotation(ctx: Ctx, input: { cart: CartInput; customerName
   });
 }
 
-export function getQuotation(ctx: Ctx, id: number) {
+export function getQuotation(ctx: Ctx, id: number): any {
   requirePerm(ctx, 'quotations.manage');
   const q = ctx.db.prepare(
     `SELECT q.*, u.full_name AS user_name, c.name AS customer_full_name, s.invoice_no FROM quotations q JOIN users u ON u.id = q.user_id

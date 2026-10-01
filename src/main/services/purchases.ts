@@ -100,7 +100,7 @@ export function createPurchase(ctx: Ctx, raw: PurchaseInput) {
   });
 }
 
-export function getPurchase(ctx: Ctx, id: number) {
+export function getPurchase(ctx: Ctx, id: number): any {
   requirePerm(ctx, 'purchases.view');
   const p = ctx.db.prepare(
     `SELECT pu.*, s.name AS supplier_name, s.phone AS supplier_phone, u.full_name AS user_name, l.name AS location_name, po.po_no
@@ -227,7 +227,7 @@ export function savePurchaseOrder(ctx: Ctx, id: number | null, raw: PurchaseOrde
   });
 }
 
-export function getPurchaseOrder(ctx: Ctx, id: number) {
+export function getPurchaseOrder(ctx: Ctx, id: number): any {
   requirePerm(ctx, 'purchases.view');
   const po = ctx.db.prepare(
     `SELECT po.*, s.name AS supplier_name, s.phone AS supplier_phone, u.full_name AS user_name FROM purchase_orders po JOIN suppliers s ON s.id = po.supplier_id
