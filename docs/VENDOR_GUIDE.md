@@ -1,5 +1,16 @@
 # Vendor guide — licensing and releases
 
+## 0. The easy way: the offline browser tool (no Node, no command line)
+
+Open `tools/license/license-tool.html` in Chrome or Edge (double-click). It runs fully offline.
+
+- **إنشاء المفتاح (once):** creates the signing key **on your computer** and downloads `sabermarko-private-key.pem`.
+  Keep that file on a USB drive with a second copy; never send it or commit it. Copy the **public key** it shows and
+  put it in `src/main/license/public-key.ts` (or send it to whoever builds the release — it is not a secret).
+- **توليد كود تفعيل:** choose the `.pem` file, paste the customer's machine code, pick permanent/temporary and the
+  edition → copy the `SBM1.…` code to the customer. Every code is self-checked before it is shown.
+- The same `.pem` works with the command-line tools below (`npm run license:issue -- --key <file> …`).
+
 ## 1. Generate YOUR signing key (once, on your own computer)
 
 The repository ships a **development** public key. Its private key exists only in development environments,

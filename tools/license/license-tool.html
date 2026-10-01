@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>مولّد أكواد التفعيل — سابر ماركو</title>
+<!--
+  Vendor license tool for SaberMarko POS. Runs 100% offline in the vendor's browser (Chrome / Edge / Firefox).
+  - "إنشاء المفتاح": creates the Ed25519 signing key pair ON THIS COMPUTER. The private key is downloaded as a
+    file and never leaves the computer; only the PUBLIC key goes into the app (src/main/license/public-key.ts).
+  - "كود تفعيل": signs a license exactly like tools/license/issue.mjs (format SBM1.<payload>.<signature>).
+  This file contains NO key and is safe to keep in the repository. Never put the private key file in the repository.
+-->
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --ink:#1d2330; --muted:#5d6676; --line:#dfe3ea; --accent:#0b6e4f; --accent-ink:#fff; --warn-bg:#fff6e0; --warn:#8a5a00; --bad:#b42318; --ok-bg:#e8f6ef; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14171c; --card:#1d2128; --ink:#e8ebf0; --muted:#a3abb8; --line:#323844; --accent:#3fbf8f; --accent-ink:#06261b; --warn-bg:#3a2e12; --warn:#f3c96b; --bad:#ff8a80; --ok-bg:#163126; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.6 "Segoe UI", Tahoma, system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .tabs { display:flex; gap:8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tab { border:1px solid var(--line); background:var(--card); color:var(--ink); padding:10px 16px; border-radius:10px; cursor:pointer; font:inherit; font-weight:600; }
+  .tab[aria-selected="true"] { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+  section { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; }
+  label { display:block; font-weight:600; margin: 14px 0 6px; }
+  .help { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  input, select, textarea { width:100%; font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); }
+  textarea { font-family: Consolas, "Courier New", monospace; font-size: 13px; direction: ltr; text-align: left; }
+  .ltr { direction: ltr; text-align: left; font-family: Consolas, "Courier New", monospace; }
+  .row { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 560px) { .row { grid-template-columns: 1fr; } }
+  button.primary { margin-top: 18px; background:var(--accent); color:var(--accent-ink); border:0; padding:12px 20px; border-radius:10px; font:inherit; font-weight:700; cursor:pointer; }
+  button.secondary { margin-top: 8px; background:transparent; color:var(--ink); border:1px solid var(--line); padding:8px 14px; border-radius:10px; font:inherit; cursor:pointer; }
+  .note { background:var(--warn-bg); color:var(--warn); border-radius:10px; padding:12px 14px; margin-top: 12px; font-size: 15px; }
+  .ok { background:var(--ok-bg); border-radius:10px; padding:12px 14px; margin-top: 16px; }
+  .err { color: var(--bad); font-weight: 600; margin-top: 12px; white-space: pre-line; }
+  ol { padding-inline-start: 22px; } li { margin: 4px 0; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>مولّد أكواد التفعيل</h1>
+  <p class="sub">سابر ماركو — يعمل بدون إنترنت على جهازك فقط. لا يُرسل أي شيء لأي مكان.</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-issue" aria-selected="true">توليد كود تفعيل</button>
+    <button class="tab" role="tab" id="tab-keygen" aria-selected="false">إنشاء المفتاح (مرة واحدة فقط)</button>
+  </div>
+
+  <section id="panel-issue">
+    <label for="keyfile">ملف المفتاح الخاص (sabermarko-private-key.pem)</label>
+    <input type="file" id="keyfile" accept=".pem,.txt">
+    <div class="help" id="keyinfo">اختر الملف الذي حفظته عند إنشاء المفتاح.</div>
+
+    <label for="machine">كود جهاز العميل</label>
+    <input id="machine" class="ltr" placeholder="9F2C1-0B7A4-33D10-AA0F2" autocomplete="off">
+    <div class="help">يظهر للعميل في شاشة «الترخيص» داخل البرنامج، ويرسله لك.</div>
+
+    <label for="customer">اسم العميل / المحل</label>
+    <input id="customer" placeholder="سوبر ماركت البركة" autocomplete="off">
+
+    <div class="row">
+      <div>
+        <label for="type">نوع الترخيص</label>
+        <select id="type">
+          <option value="permanent">دائم</option>
+          <option value="temporary">مؤقت</option>
+        </select>
+      </div>
+      <div id="days-wrap" hidden>
+        <label for="days">المدة (أيام)</label>
+        <input id="days" type="number" min="1" max="3650" value="365">
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="edition">الباقة</label>
+        <select id="edition">
+          <option value="">بدون باقة (10 مستخدمين)</option>
+          <option value="basic">الأساسية (2 مستخدم)</option>
+          <option value="standard">القياسية (5 مستخدمين)</option>
+          <option value="professional">الاحترافية (15 مستخدم)</option>
+        </select>
+      </div>
+      <div>
+        <label for="maxusers">عدد مستخدمين مخصص (اختياري)</label>
+        <input id="maxusers" type="number" min="1" max="100" placeholder="—">
+      </div>
+    </div>
+
+    <button class="primary" id="issue">توليد كود التفعيل</button>
+    <div class="err" id="issue-err" role="alert"></div>
+    <div class="ok" id="issue-out" hidden>
+      <strong>كود التفعيل — أرسله للعميل كما هو:</strong>
+      <textarea id="code" rows="5" readonly></textarea>
+      <button class="secondary" id="copy-code">نسخ الكود</button>
+      <div class="help" id="code-info"></div>
+    </div>
+  </section>
+
+  <section id="panel-keygen" hidden>
+    <p><strong>تفعله مرة واحدة فقط في حياة البرنامج.</strong> المفتاح الخاص هو «ختم» أكواد التفعيل: من يملكه يستطيع تفعيل أي نسخة.</p>
+    <div class="note">إذا أنشأت مفتاحًا جديدًا بعد نشر البرنامج، فكل أكواد التفعيل القديمة لن تعمل مع النسخة الجديدة. لا تضغط هذا الزر مرة ثانية إلا إذا كنت تقصد ذلك.</div>
+    <button class="primary" id="keygen">إنشاء المفتاح</button>
+    <div class="err" id="keygen-err" role="alert"></div>
+    <div class="ok" id="keygen-out" hidden>
+      <p><strong>✅ تم.</strong> نزل ملف <span class="ltr">sabermarko-private-key.pem</span> في مجلد التنزيلات.</p>
+      <ol>
+        <li>انقل الملف إلى مكان آمن (فلاشة) واحتفظ بنسخة ثانية. <strong>لا ترسله لأحد ولا ترفعه على GitHub.</strong></li>
+        <li>انسخ «المفتاح العام» التالي وأرسله لـClaude (هذا آمن وليس سرًا) — هو الذي يُبنى داخل البرنامج.</li>
+      </ol>
+      <label for="pub">المفتاح العام</label>
+      <textarea id="pub" rows="4" readonly></textarea>
+      <button class="secondary" id="copy-pub">نسخ المفتاح العام</button>
+      <div class="help" id="fp"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const subtle = globalThis.crypto && globalThis.crypto.subtle;
+  const UNSUPPORTED = 'هذا المتصفح لا يدعم التوقيع المطلوب. افتح الملف في Google Chrome أو Microsoft Edge (إصدار حديث).';
+
+  // ---- encoding helpers (identical to tools/license/common.mjs) ----
+  const b64 = (bytes) => { let s = ''; for (const b of new Uint8Array(bytes)) s += String.fromCharCode(b); return btoa(s); };
+  const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  const b64u = (bytes) => b64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const pem = (label, der) => `-----BEGIN ${label}-----\n${b64(der).match(/.{1,64}/g).join('\n')}\n-----END ${label}-----\n`;
+  const unpem = (text, label) => {
+    const m = String(text).match(new RegExp(`-----BEGIN ${label}-----([\\s\\S]+?)-----END ${label}-----`));
+    if (!m) return null;
+    return unb64(m[1].replace(/\s+/g, ''));
+  };
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  async function fingerprint(spkiDer) {
+    const h = new Uint8Array(await subtle.digest('SHA-256', spkiDer));
+    return Array.from(h, (b) => b.toString(16).padStart(2, '0')).join('').slice(0, 32).match(/.{4}/g).join(':');
+  }
+
+  // ---- tabs ----
+  function show(which) {
+    for (const t of ['issue', 'keygen']) {
+      $('tab-' + t).setAttribute('aria-selected', String(t === which));
+      $('panel-' + t).hidden = t !== which;
+    }
+  }
+  $('tab-issue').onclick = () => show('issue');
+  $('tab-keygen').onclick = () => show('keygen');
+  $('type').onchange = () => { $('days-wrap').hidden = $('type').value !== 'temporary'; };
+
+  // ---- key creation ----
+  $('keygen').onclick = async () => {
+    $('keygen-err').textContent = '';
+    try {
+      if (!subtle) throw new Error(UNSUPPORTED);
+      let pair;
+      try { pair = await subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']); } catch { throw new Error(UNSUPPORTED); }
+      const pkcs8 = await subtle.exportKey('pkcs8', pair.privateKey);
+      const spki = await subtle.exportKey('spki', pair.publicKey);
+      const blob = new Blob([pem('PRIVATE KEY', pkcs8)], { type: 'application/x-pem-file' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'sabermarko-private-key.pem';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      $('pub').value = pem('PUBLIC KEY', spki).trim();
+      $('fp').textContent = 'بصمة المفتاح: ' + await fingerprint(spki);
+      $('keygen-out').hidden = false;
+    } catch (e) { $('keygen-err').textContent = e.message || String(e); }
+  };
+  $('copy-pub').onclick = () => navigator.clipboard.writeText($('pub').value);
+
+  // ---- load the private key ----
+  let signingKey = null;
+  $('keyfile').onchange = async () => {
+    signingKey = null;
+    $('issue-err').textContent = '';
+    const f = $('keyfile').files[0];
+    if (!f) return;
+    try {
+      if (!subtle) throw new Error(UNSUPPORTED);
+      const text = await f.text();
+      if (/ENCRYPTED PRIVATE KEY/.test(text)) throw new Error('هذا المفتاح محمي بكلمة مرور. استخدم أمر npm run license:issue لهذا النوع من المفاتيح.');
+      const der = unpem(text, 'PRIVATE KEY');
+      if (!der) throw new Error('هذا ليس ملف مفتاح خاص صحيح.');
+      let priv;
+      try { priv = await subtle.importKey('pkcs8', der, { name: 'Ed25519' }, true, ['sign']); } catch { throw new Error('تعذّر قراءة المفتاح (ليس مفتاح Ed25519، أو المتصفح لا يدعمه).'); }
+      // derive the public half (JWK carries it as "x") to self-check every code before it is shown
+      const jwk = await subtle.exportKey('jwk', priv);
+      const pub = await subtle.importKey('jwk', { kty: 'OKP', crv: 'Ed25519', x: jwk.x }, { name: 'Ed25519' }, true, ['verify']);
+      const spki = await subtle.exportKey('spki', pub);
+      signingKey = { priv, pub, fp: await fingerprint(spki) };
+      $('keyinfo').textContent = '✅ تم تحميل المفتاح — البصمة: ' + signingKey.fp;
+    } catch (e) {
+      $('keyinfo').textContent = 'اختر الملف الذي حفظته عند إنشاء المفتاح.';
+      $('issue-err').textContent = e.message || String(e);
+    }
+  };
+
+  // ---- issue a license (same payload as tools/license/issue.mjs) ----
+  $('issue').onclick = async () => {
+    $('issue-err').textContent = '';
+    $('issue-out').hidden = true;
+    try {
+      if (!signingKey) throw new Error('اختر ملف المفتاح الخاص أولًا.');
+      const machine = $('machine').value.replace(/\s+/g, '').toUpperCase();
+      if (machine !== '*' && !/^[0-9A-F]{5}(-[0-9A-F]{5}){3}$/.test(machine)) throw new Error('كود الجهاز غير صحيح. شكله مثل: 9F2C1-0B7A4-33D10-AA0F2');
+      const customer = $('customer').value.trim();
+      if (!customer) throw new Error('اكتب اسم العميل أو المحل.');
+      const type = $('type').value;
+      const today = new Date();
+      let expires = null;
+      if (type === 'temporary') {
+        const days = Number($('days').value);
+        if (!Number.isInteger(days) || days < 1 || days > 3650) throw new Error('المدة يجب أن تكون عددًا صحيحًا من 1 إلى 3650 يومًا.');
+        const d = new Date(today); d.setDate(d.getDate() + days); expires = iso(d);
+      }
+      const edition = $('edition').value;
+      const mu = $('maxusers').value.trim();
+      let maxUsers;
+      if (mu) {
+        maxUsers = Number(mu);
+        if (!Number.isInteger(maxUsers) || maxUsers < 1 || maxUsers > 100) throw new Error('عدد المستخدمين يجب أن يكون من 1 إلى 100.');
+      }
+      const payload = {
+        v: 1, id: crypto.randomUUID().slice(0, 8), type, customer, machine, issued: iso(today), expires,
+        ...(edition ? { edition } : {}),
+        ...(maxUsers !== undefined ? { maxUsers } : {}),
+      };
+      const data = new TextEncoder().encode(JSON.stringify(payload));
+      const signed = new Uint8Array(5 + data.length);
+      signed.set(new TextEncoder().encode('SBM1.'), 0);
+      signed.set(data, 5);
+      const sig = await subtle.sign({ name: 'Ed25519' }, signingKey.priv, signed);
+      if (!(await subtle.verify({ name: 'Ed25519' }, signingKey.pub, sig, signed))) throw new Error('فشل التحقق الذاتي من التوقيع.');
+      $('code').value = `SBM1.${b64u(data)}.${b64u(sig)}`;
+      $('code-info').textContent = `${type === 'permanent' ? 'دائم' : 'مؤقت حتى ' + expires} — ${customer} — جهاز ${machine} — بصمة المفتاح ${signingKey.fp}`;
+      $('issue-out').hidden = false;
+    } catch (e) { $('issue-err').textContent = e.message || String(e); }
+  };
+  $('copy-code').onclick = () => navigator.clipboard.writeText($('code').value);
+})();
+</script>
+</body>
+</html>
