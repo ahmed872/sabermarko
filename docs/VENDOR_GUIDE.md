@@ -1,15 +1,19 @@
 # Vendor guide — licensing and releases
 
-## 0. The easy way: the offline browser tool (no Node, no command line)
+## 0. The easy way: key in GitHub Secrets, codes from GitHub (even from a phone)
 
-Open `tools/license/license-tool.html` in Chrome or Edge (double-click). It runs fully offline.
+1. Open `tools/license/license-tool.html` in Chrome or Edge (double-click, works offline) → **إنشاء المفتاح**.
+   The key is created on your computer; `sabermarko-private-key.pem` is downloaded (keep it on a USB drive as a backup).
+2. **نسخ المفتاح الخاص** → GitHub → Settings → Secrets and variables → Actions → **New repository secret**
+   → name `SBM_LICENSE_PRIVATE_KEY`, value = the copied key. A secret can be used by workflows but never read back.
+3. Releases (`git tag vX.Y.Z && git push origin vX.Y.Z`) now build in the PUBLIC half of that key automatically
+   (`tools/license/use-secret-key.mjs`); a tag release without the secret is refused.
+4. Activation code: Actions → **توليد كود تفعيل** → Run workflow → machine code, customer, permanent/temporary,
+   edition → the code is in the run summary. The tool page (**توليد كود تفعيل** tab + the `.pem`) works too, offline.
 
-- **إنشاء المفتاح (once):** creates the signing key **on your computer** and downloads `sabermarko-private-key.pem`.
-  Keep that file on a USB drive with a second copy; never send it or commit it. Copy the **public key** it shows and
-  put it in `src/main/license/public-key.ts` (or send it to whoever builds the release — it is not a secret).
-- **توليد كود تفعيل:** choose the `.pem` file, paste the customer's machine code, pick permanent/temporary and the
-  edition → copy the `SBM1.…` code to the customer. Every code is self-checked before it is shown.
-- The same `.pem` works with the command-line tools below (`npm run license:issue -- --key <file> …`).
+Why a signature instead of a shared HMAC secret: the installed app holds only the **public** key, so nobody can
+make activation codes from the program file, even by reverse-engineering it. Codes are longer (`SBM1.…`) — send
+them by WhatsApp/e-mail for copy-paste rather than dictating them.
 
 ## 1. Generate YOUR signing key (once, on your own computer)
 

@@ -7,7 +7,7 @@ import { join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-export const PUBLIC_KEY_TS = join(REPO_ROOT, 'src/main/license/public-key.ts');
+export const PUBLIC_KEY_TS = process.env.SBM_PUBLIC_KEY_TS || join(REPO_ROOT, 'src/main/license/public-key.ts');
 /** Default home of the vendor's private key: OUTSIDE any repository, in the user's profile. */
 export const DEFAULT_KEY_DIR = process.env.SBM_VENDOR_KEY_DIR || join(homedir(), '.sabermarko-vendor-keys');
 export const DEFAULT_PRIVATE_KEY = join(DEFAULT_KEY_DIR, 'private.pem');

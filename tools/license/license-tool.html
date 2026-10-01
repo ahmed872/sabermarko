@@ -6,8 +6,9 @@
 <title>مولّد أكواد التفعيل — سابر ماركو</title>
 <!--
   Vendor license tool for SaberMarko POS. Runs 100% offline in the vendor's browser (Chrome / Edge / Firefox).
-  - "إنشاء المفتاح": creates the Ed25519 signing key pair ON THIS COMPUTER. The private key is downloaded as a
-    file and never leaves the computer; only the PUBLIC key goes into the app (src/main/license/public-key.ts).
+  - "إنشاء المفتاح": creates the Ed25519 signing key pair ON THIS COMPUTER and downloads the private key file.
+    The vendor stores it as the GitHub repository secret SBM_LICENSE_PRIVATE_KEY; releases then build in its PUBLIC
+    half automatically (tools/license/use-secret-key.mjs) and make-key.yml issues codes with it.
   - "كود تفعيل": signs a license exactly like tools/license/issue.mjs (format SBM1.<payload>.<signature>).
   This file contains NO key and is safe to keep in the repository. Never put the private key file in the repository.
 -->
@@ -109,12 +110,15 @@
     <div class="ok" id="keygen-out" hidden>
       <p><strong>✅ تم.</strong> نزل ملف <span class="ltr">sabermarko-private-key.pem</span> في مجلد التنزيلات.</p>
       <ol>
-        <li>انقل الملف إلى مكان آمن (فلاشة) واحتفظ بنسخة ثانية. <strong>لا ترسله لأحد ولا ترفعه على GitHub.</strong></li>
-        <li>انسخ «المفتاح العام» التالي وأرسله لـClaude (هذا آمن وليس سرًا) — هو الذي يُبنى داخل البرنامج.</li>
+        <li>اضغط «نسخ المفتاح الخاص» بالأسفل.</li>
+        <li>في GitHub افتح المستودع ← <b>Settings</b> ← <b>Secrets and variables</b> ← <b>Actions</b> ← <b>New repository secret</b>.</li>
+        <li>الاسم: <span class="ltr">SBM_LICENSE_PRIVATE_KEY</span> — والقيمة: الصق المفتاح ← <b>Add secret</b>.</li>
+        <li>احتفظ بالملف على فلاشة كنسخة احتياطية. <strong>لا ترسله لأحد ولا تضعه داخل ملفات المشروع.</strong></li>
       </ol>
-      <label for="pub">المفتاح العام</label>
+      <button class="secondary" id="copy-priv">نسخ المفتاح الخاص (للصقه في GitHub)</button>
+      <p class="help">بعدها: كل إصدار من GitHub يُبنى بهذا المفتاح تلقائيًا، وتولّد أكواد التفعيل من Actions ← «توليد كود تفعيل» (حتى من الموبايل) أو من هذه الصفحة.</p>
+      <label for="pub">المفتاح العام (ليس سرًا — للمعلومة فقط)</label>
       <textarea id="pub" rows="4" readonly></textarea>
-      <button class="secondary" id="copy-pub">نسخ المفتاح العام</button>
       <div class="help" id="fp"></div>
     </div>
   </section>
@@ -155,6 +159,7 @@
   $('type').onchange = () => { $('days-wrap').hidden = $('type').value !== 'temporary'; };
 
   // ---- key creation ----
+  let lastPrivatePem = '';
   $('keygen').onclick = async () => {
     $('keygen-err').textContent = '';
     try {
@@ -169,12 +174,13 @@
       a.download = 'sabermarko-private-key.pem';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      lastPrivatePem = pem('PRIVATE KEY', pkcs8);
       $('pub').value = pem('PUBLIC KEY', spki).trim();
       $('fp').textContent = 'بصمة المفتاح: ' + await fingerprint(spki);
       $('keygen-out').hidden = false;
     } catch (e) { $('keygen-err').textContent = e.message || String(e); }
   };
-  $('copy-pub').onclick = () => navigator.clipboard.writeText($('pub').value);
+  $('copy-priv').onclick = () => navigator.clipboard.writeText(lastPrivatePem);
 
   // ---- load the private key ----
   let signingKey = null;

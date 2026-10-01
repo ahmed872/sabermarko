@@ -17,7 +17,7 @@ const fp = fingerprint(embeddedPublicKeyPem());
 const dev = JSON.parse(readFileSync('tools/release/dev-keys.json', 'utf8')).fingerprints;
 if (dev.includes(fp)) {
   if (process.env.ALLOW_DEV_LICENSE_KEY === '1') console.warn(`WARNING: building with the DEVELOPMENT license key ${fp} (allowed for a test pre-release only).`);
-  else errors.push(`the app embeds the DEVELOPMENT license key (${fp}). Run "npm run license:keygen" on your own computer, commit src/main/license/public-key.ts, then tag again.`);
+  else errors.push(`the app embeds the DEVELOPMENT license key (${fp}). Add your key as the repository secret SBM_LICENSE_PRIVATE_KEY (Settings → Secrets and variables → Actions; create it with tools/license/license-tool.html), or run "npm run license:keygen" and commit src/main/license/public-key.ts, then tag again.`);
 }
 try { execFileSync('node', ['tools/release/scan-secrets.mjs'], { stdio: 'inherit' }); } catch { errors.push('secret scan failed'); }
 if (errors.length) { console.error('RELEASE GATE FAILED:\n' + errors.map((e) => ` - ${e}`).join('\n')); process.exit(1); }

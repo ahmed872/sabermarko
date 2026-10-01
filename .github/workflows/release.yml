@@ -1,7 +1,8 @@
 # Release: push a tag "vX.Y.Z" (matching package.json) to build the Windows installer on a real
 # Windows runner, run the tests, compute SHA256 and publish a GitHub Release.
 #
-# NO private key, password, certificate or other secret is used or uploaded here. The installer is
+# The only secret used is SBM_LICENSE_PRIVATE_KEY, from which just the PUBLIC license key is derived and built in;
+# no private key, password or certificate is written to the build or uploaded. The installer is
 # NOT code-signed (there is no code-signing certificate); publishing on GitHub does not sign it.
 # A manual run (workflow_dispatch) builds the installer as a downloadable artifact without publishing.
 name: Release
@@ -28,6 +29,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # the production license key lives only in the repository secret SBM_LICENSE_PRIVATE_KEY; the app gets its
+      # PUBLIC half (the private key is not written anywhere here). Required for a tag release, optional for a test build.
+      - name: Production license key (public half, from the repository secret)
+        shell: bash
+        env:
+          SBM_LICENSE_PRIVATE_KEY: ${{ secrets.SBM_LICENSE_PRIVATE_KEY }}
+        run: node tools/license/use-secret-key.mjs ${{ github.ref_type == 'tag' && ' ' || '--optional' }}
       - name: Release gate (version / changelog / production license key / secret scan)
         run: node tools/release/check-release.mjs
       - run: npm run typecheck

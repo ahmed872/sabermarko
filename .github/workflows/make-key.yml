@@ -1,0 +1,89 @@
+# توليد كود تفعيل — run it from GitHub (browser or phone): Actions → "توليد كود تفعيل" → Run workflow.
+# The code is signed with the vendor's private key stored ONLY in the repository secret SBM_LICENSE_PRIVATE_KEY.
+# The secret is never printed; the activation code (not a secret) appears in the run summary.
+name: توليد كود تفعيل
+on:
+  workflow_dispatch:
+    inputs:
+      machine:
+        description: 'كود جهاز العميل (من شاشة الترخيص) — مثال 9F2C1-0B7A4-33D10-AA0F2'
+        required: true
+      customer:
+        description: 'اسم العميل / المحل'
+        required: true
+      type:
+        description: 'نوع الترخيص'
+        type: choice
+        options: [permanent, temporary]
+        default: permanent
+      days:
+        description: 'المدة بالأيام (للترخيص المؤقت فقط)'
+        default: '365'
+      edition:
+        description: 'الباقة (عدد المستخدمين): none=10، basic=2، standard=5، professional=15'
+        type: choice
+        options: [none, basic, standard, professional]
+        default: none
+permissions:
+  contents: read
+concurrency:
+  group: make-key
+  cancel-in-progress: false
+
+jobs:
+  issue:
+    name: كود التفعيل
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Load the license key from the repository secret
+        env:
+          SBM_LICENSE_PRIVATE_KEY: ${{ secrets.SBM_LICENSE_PRIVATE_KEY }}
+        run: node tools/license/use-secret-key.mjs --key-out "$RUNNER_TEMP/vendor.pem"
+      - name: Issue the activation code
+        env:
+          MACHINE: ${{ inputs.machine }}
+          CUSTOMER: ${{ inputs.customer }}
+          TYPE: ${{ inputs.type }}
+          DAYS: ${{ inputs.days }}
+          EDITION: ${{ inputs.edition }}
+        run: |
+          set -euo pipefail
+          machine="$(printf '%s' "$MACHINE" | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
+          if ! printf '%s' "$machine" | grep -Eq '^([0-9A-F]{5}(-[0-9A-F]{5}){3}|\*)$'; then
+            echo "::error::كود الجهاز غير صحيح: شكله مثل 9F2C1-0B7A4-33D10-AA0F2"; exit 1
+          fi
+          extra=()
+          if [ "$TYPE" = temporary ]; then extra+=(--days "$DAYS"); fi
+          if [ "$EDITION" != none ]; then extra+=(--edition "$EDITION"); fi
+          if ! node tools/license/issue.mjs --key "$RUNNER_TEMP/vendor.pem" --machine "$machine" --customer "$CUSTOMER" --type "$TYPE" "${extra[@]}" > code.txt 2> payload.txt; then
+            cat payload.txt >&2; exit 1
+          fi
+          code="$(cat code.txt)"
+          fp="$(node -e "import('./tools/license/common.mjs').then(m => console.log(m.fingerprint(m.embeddedPublicKeyPem())))")"
+          node tools/license/verify.mjs "$code" --machine "$machine"
+          {
+            echo "## ✅ كود التفعيل"
+            echo
+            echo "انسخ الكود كاملًا وأرسله للعميل ليلصقه في شاشة «الترخيص»:"
+            echo
+            echo '```'
+            echo "$code"
+            echo '```'
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| العميل | $CUSTOMER |"
+            echo "| كود الجهاز | \`$machine\` |"
+            if [ "$TYPE" = temporary ]; then echo "| النوع | مؤقت — $DAYS يوم |"; else echo "| النوع | دائم |"; fi
+            echo "| الباقة | $EDITION |"
+            echo "| بصمة المفتاح | \`$fp\` (يجب أن تطابق بصمة الإصدار الذي عند العميل) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "ACTIVATION CODE: $code"
+      - name: Remove the key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/vendor.pem"
