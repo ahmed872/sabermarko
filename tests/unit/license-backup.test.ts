@@ -127,7 +127,11 @@ describe('licensing (spec §58-60)', () => {
     clock.t = start + 30 * DAY;
     expect(m.status().state).toBe('expired');
     expect(m.activate('garbage')).toMatchObject({ ok: false, error: 'LICENSE_INVALID' });
-    const forged = issue({}).replace(/.$/, (c) => (c === 'A' ? 'B' : 'A'));
+    // flip a character in the MIDDLE of the signature (the last base64 char only carries 2 bits)
+    const good = issue({});
+    const [h, d, sg] = good.split('.');
+    const mid = Math.floor(sg.length / 2);
+    const forged = `${h}.${d}.${sg.slice(0, mid)}${sg[mid] === 'A' ? 'B' : 'A'}${sg.slice(mid + 1)}`;
     expect(m.activate(forged)).toMatchObject({ ok: false, error: 'LICENSE_INVALID' });
     expect(m.activate(issue({ machine: 'AAAAA-BBBBB-CCCCC-DDDDD' }))).toMatchObject({ ok: false, error: 'LICENSE_WRONG_MACHINE' });
     expect(m.activate(issue({ type: 'temporary', expires: '2026-10-05' }))).toMatchObject({ ok: false, error: 'LICENSE_EXPIRED' });

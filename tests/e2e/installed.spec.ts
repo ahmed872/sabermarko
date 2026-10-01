@@ -41,6 +41,13 @@ test(`installed app — phase ${phase}`, async () => {
     await loginAs(page, 'أحمد المدير', '1234');
     await go(page, '/products');
     await expect(page.locator('tr', { hasText: 'عصير مانجو' })).toContainText('29'); // back to the backup state
+  } else if (phase === 'updated') {
+    // version upgrade installed over the old one: migrations ran, data and trial preserved
+    await expect(page.getByText(`الإصدار ${process.env.SBM_EXPECT_VERSION}`)).toBeVisible();
+    await loginAs(page, 'أحمد المدير', '1234');
+    await go(page, '/products');
+    await expect(page.locator('tr', { hasText: 'عصير مانجو' })).toContainText('29');
+    await sellOne(page, '111222333', '20');
   } else if (phase === 'reinstalled') {
     // after uninstall + reinstall: data and trial are kept (never deleted on uninstall)
     await expect(page.getByText('سجّل الدخول للمتابعة')).toBeVisible();
