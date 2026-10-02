@@ -27,6 +27,7 @@ function BalanceCell({ kind, balance }: { kind: Kind; balance: number }) {
 function PartyList({ kind }: { kind: Kind }) {
   const t = T[kind];
   const nav = useNavigate();
+  const qc = useQueryClient();
   const { can } = useApp();
   const [params] = useSearchParams();
   const [q, setQ] = useState('');
@@ -55,7 +56,7 @@ function PartyList({ kind }: { kind: Kind }) {
             <tbody>{rows.map((r) => <tr key={r.id} className="clickable" onClick={() => nav(`${t.base}/${r.id}`)}><td className="bold">{r.name}</td><td className="num">{r.phone ?? '—'}</td>{kind === 'supplier' && <td>{r.company ?? '—'}</td>}<td className="n"><BalanceCell kind={kind} balance={r.balance} /></td><td className="num small">{dateOnly(r.last_activity)}</td></tr>)}</tbody></table>
         )}
       </div>
-      {edit && <PartyForm kind={kind} initial={edit} onClose={() => setEdit(null)} onSaved={(id) => { setEdit(null); void list.refetch(); if (!edit.id) nav(`${t.base}/${id}`); }} />}
+      {edit && <PartyForm kind={kind} initial={edit} onClose={() => setEdit(null)} onSaved={(id) => { setEdit(null); void qc.invalidateQueries({ queryKey: [`${kind}s`] }); if (!edit.id) nav(`${t.base}/${id}`); }} />}
     </div>
   );
 }

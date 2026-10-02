@@ -604,10 +604,10 @@ function HeldDialog({ onClose, onResume }: { onClose: () => void; onResume: (h: 
           <tbody>{held.data.map((h) => (
             <tr key={h.id}>
               <td className="num">{dateTime(h.created_at)}</td><td>{h.customer_name ?? h.label ?? '—'}</td><td>{h.user_name}</td><td className="n">{h.items_count}</td><td className="n bold">{money(h.total)}</td>
-              <td className="row gap-sm" style={{ justifyContent: 'flex-end' }}>
+              <td><div className="row gap-sm" style={{ justifyContent: 'flex-end' }}>
                 <button className="btn sm primary" onClick={() => onResume(h)}>استعادة</button>
                 <button className="btn sm ghost" onClick={() => run(async () => { await api('held.delete', { id: h.id }); await qc.invalidateQueries({ queryKey: ['held'] }); })}><Trash2 size={14} /></button>
-              </td>
+              </div></td>
             </tr>
           ))}</tbody></table>
       )}

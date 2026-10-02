@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>دليل الاستخدام — سابر ماركو</title>
+<style>
+  @font-face { font-family: Plex; font-weight: 400; src: url('../../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-400-normal.woff2') format('woff2'); }
+  @font-face { font-family: Plex; font-weight: 600; src: url('../../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-600-normal.woff2') format('woff2'); }
+  @font-face { font-family: Plex; font-weight: 700; src: url('../../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-700-normal.woff2') format('woff2'); }
+  @font-face { font-family: PlexLatin; font-weight: 400; src: url('../../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-latin-400-normal.woff2') format('woff2'); }
+  @font-face { font-family: PlexLatin; font-weight: 700; src: url('../../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-latin-700-normal.woff2') format('woff2'); }
+  @page { size: A4; margin: 16mm 15mm 18mm 15mm; }
+  :root { --teal: #0f766e; --teal-d: #0b4f4a; --teal-l: #e6f4f1; --ink: #1c2430; --muted: #5b6676; --line: #dde3ea; --warn: #fff6e0; --warn-ink: #7a5200; --bad: #fdecec; --bad-ink: #9b1c1c; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font-family: Plex, PlexLatin, 'Segoe UI', Tahoma, sans-serif; color: var(--ink); font-size: 11.5pt; line-height: 1.75; background: #fff; }
+  h1, h2, h3 { line-height: 1.35; margin: 0; }
+  p { margin: 0 0 8px; }
+  b, strong { font-weight: 700; }
+  .ltr { direction: ltr; unicode-bidi: isolate; font-family: PlexLatin, Plex, sans-serif; }
+  kbd { font-family: PlexLatin, sans-serif; font-size: 9.5pt; font-weight: 700; background: #f1f4f7; border: 1px solid #c9d1da; border-bottom-width: 2px; border-radius: 5px; padding: 0 6px; direction: ltr; unicode-bidi: isolate; white-space: nowrap; }
+
+  /* cover */
+  .cover { height: 263mm; display: flex; flex-direction: column; justify-content: space-between; background: linear-gradient(160deg, #0f766e 0%, #0b3b3f 100%); color: #fff; border-radius: 14px; padding: 26mm 18mm 18mm; page-break-after: always; }
+  .cover .logo { width: 64px; height: 64px; border-radius: 16px; background: #fff; color: var(--teal); font-size: 34pt; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .cover h1 { font-size: 34pt; margin-top: 18mm; }
+  .cover .sub { font-size: 15pt; opacity: .9; margin-top: 6px; }
+  .cover .what { margin-top: 12mm; font-size: 12pt; opacity: .95; }
+  .cover .what li { margin: 4px 0; }
+  .cover .foot { font-size: 10pt; opacity: .8; display: flex; justify-content: space-between; }
+
+  /* contents */
+  .toc { page-break-after: always; }
+  .toc h2 { font-size: 20pt; color: var(--teal-d); margin-bottom: 10px; }
+  .toc ol { list-style: none; padding: 0; margin: 0; counter-reset: t; }
+  .toc li { counter-increment: t; display: flex; gap: 12px; align-items: baseline; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 12pt; }
+  .toc li::before { content: counter(t); min-width: 28px; height: 28px; border-radius: 8px; background: var(--teal-l); color: var(--teal-d); font-weight: 700; display: inline-flex; align-items: center; justify-content: center; font-family: PlexLatin; }
+  .toc li span { color: var(--muted); font-size: 10pt; margin-inline-start: auto; }
+
+  /* sections */
+  section.ch { page-break-before: always; }
+  .ch-head { display: flex; align-items: center; gap: 12px; padding-bottom: 8px; border-bottom: 3px solid var(--teal); margin-bottom: 12px; }
+  .ch-num { width: 40px; height: 40px; border-radius: 11px; background: var(--teal); color: #fff; font-weight: 700; font-size: 17pt; display: flex; align-items: center; justify-content: center; font-family: PlexLatin; flex: none; }
+  .ch-head h2 { font-size: 19pt; color: var(--teal-d); }
+  .ch-head .lead { color: var(--muted); font-size: 10.5pt; }
+  h3 { font-size: 13.5pt; color: var(--teal-d); margin: 14px 0 6px; }
+  ol.steps { margin: 4px 0 10px; padding-inline-start: 22px; }
+  ol.steps li, ul li { margin: 3px 0; }
+  ul { margin: 4px 0 10px; padding-inline-start: 20px; }
+
+  figure { margin: 10px 0 14px; break-inside: avoid; page-break-inside: avoid; }
+  figure img { display: block; width: 100%; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 2px 8px rgba(15, 40, 60, .08); }
+  figure.half img { width: 78%; margin: 0 auto; }
+  figure.small img { width: 62%; margin: 0 auto; }
+  figure.xsmall img { width: 50%; margin: 0 auto; }
+  figcaption { text-align: center; color: var(--muted); font-size: 9.5pt; margin-top: 5px; }
+
+  .box { border-radius: 10px; padding: 9px 12px; margin: 10px 0; font-size: 10.8pt; break-inside: avoid; }
+  .tip { background: var(--teal-l); border-inline-start: 4px solid var(--teal); }
+  .warn { background: var(--warn); border-inline-start: 4px solid #e0a100; color: var(--warn-ink); }
+  .bad { background: var(--bad); border-inline-start: 4px solid #d13b3b; color: var(--bad-ink); }
+  .box b:first-child { margin-inline-end: 4px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 10.5pt; break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: 6px 9px; text-align: start; vertical-align: top; }
+  th { background: #f3f6f8; color: var(--teal-d); font-weight: 700; }
+  td.k { white-space: nowrap; width: 1%; }
+
+  .example { background: #f7f9fb; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 10px 0; break-inside: avoid; }
+  .example .t { font-weight: 700; color: var(--teal-d); margin-bottom: 4px; }
+  .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 12px; font-size: 10.5pt; }
+  .flow span { background: var(--teal-l); color: var(--teal-d); border-radius: 999px; padding: 3px 12px; font-weight: 600; }
+  .flow i { color: var(--muted); font-style: normal; }
+  .check li { list-style: none; position: relative; padding-inline-start: 22px; }
+  .check li::before { content: '☐'; position: absolute; inset-inline-start: 0; color: var(--teal); }
+  .check { padding-inline-start: 0; }
+  .keep { break-inside: avoid; page-break-inside: avoid; }
+  h3 { break-after: avoid; page-break-after: avoid; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ cover -->
+<div class="cover">
+  <div>
+    <div class="logo">ب</div>
+    <h1>دليل الاستخدام</h1>
+    <div class="sub">سابر ماركو لإدارة المحلات — من أول تشغيل لحد إغلاق اليوم</div>
+    <ul class="what">
+      <li>تثبيت البرنامج وتجهيز المحل في دقيقة</li>
+      <li>إضافة المنتجات بالقطعة والكرتونة والوزن</li>
+      <li>الشراء، البيع، المرتجعات، الجرد</li>
+      <li>الورديات، إغلاق اليوم، النسخ الاحتياطي، التقارير</li>
+    </ul>
+  </div>
+  <div class="foot"><span>الإصدار 1.1.1</span><span>يعمل على Windows 10 / 11 — بدون إنترنت</span></div>
+</div>
+
+<!-- ============================================================ contents -->
+<div class="toc">
+  <h2>المحتويات</h2>
+  <ol>
+    <li>التثبيت <span>تحميل البرنامج وتشغيله أول مرة</span></li>
+    <li>تجهيز المحل <span>معالج أول تشغيل — 5 خطوات</span></li>
+    <li>الشاشة الرئيسية والقائمة <span>أين تجد كل شيء</span></li>
+    <li>الفترة التجريبية والتفعيل <span>20 يومًا ثم كود التفعيل</span></li>
+    <li>إضافة المنتجات <span>بالقطعة والكرتونة، وبالوزن</span></li>
+    <li>الموردون وفواتير الشراء <span>استلام البضاعة</span></li>
+    <li>البيع <span>فتح الوردية، السلة، الوزن، الدفع، الفاتورة</span></li>
+    <li>الفواتير والمرتجعات <span>البحث عن فاتورة وإرجاع صنف</span></li>
+    <li>الجرد <span>بالكرتونة والقطع</span></li>
+    <li>المستخدمون والصلاحيات <span>كاشير ومدير</span></li>
+    <li>الورديات وإغلاق اليوم <span>مطابقة الدرج والربح</span></li>
+    <li>النسخ الاحتياطي <span>أهم عادة لحماية بياناتك</span></li>
+    <li>الإعدادات والطابعة <span>بيانات المحل ونوع الورق</span></li>
+    <li>بعد ما المحل يشتغل <span>التنبيهات، الصلاحية، الاقتراحات، التقارير</span></li>
+    <li>روتين يومي وأسبوعي <span>قائمة مختصرة</span></li>
+    <li>مشاكل شائعة وحلها</li>
+  </ol>
+</div>
+
+<!-- ============================================================ 1 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">1</div><div><h2>التثبيت</h2><div class="lead">مرة واحدة على جهاز المحل</div></div></div>
+  <h3>المطلوب</h3>
+  <ul>
+    <li>جهاز Windows 10 أو Windows 11 (64-bit).</li>
+    <li>لا يحتاج إنترنت للبيع — الإنترنت مطلوب فقط لتحميل ملف التثبيت.</li>
+    <li>اختياري: قارئ باركود USB، وطابعة فواتير حرارية 80 أو 58 مم.</li>
+  </ul>
+  <h3>الخطوات</h3>
+  <ol class="steps">
+    <li>حمّل ملف التثبيت <b class="ltr">SaberMarko-POS-Setup-1.1.1.exe</b> (حوالي 115 ميجا).</li>
+    <li>افتح الملف بالضغط عليه مرتين.</li>
+    <li>قد تظهر رسالة زرقاء <b class="ltr">Windows protected your PC</b> — هذا طبيعي لأن البرنامج غير موقّع بشهادة.
+      اضغط <b class="ltr">More info</b> ثم <b class="ltr">Run anyway</b>.</li>
+    <li>اتبع خطوات التثبيت ثم اضغط إنهاء.</li>
+    <li>سيظهر اختصار <b>«سابر ماركو»</b> على سطح المكتب وفي قائمة ابدأ.</li>
+  </ol>
+  <div class="box tip"><b>تحديث البرنامج:</b> عند صدور إصدار جديد ثبّته فوق القديم مباشرة — بياناتك تبقى كما هي ويُحدّث البرنامج قاعدة البيانات تلقائيًا.</div>
+  <div class="box warn"><b>مكان البيانات:</b> بيانات المحل محفوظة على الجهاز في مجلد البرنامج، ولا تُحذف عند إزالة البرنامج أو تحديثه. ومع ذلك احفظ نسخة احتياطية على فلاشة (الفصل 12).</div>
+</section>
+
+<!-- ============================================================ 2 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">2</div><div><h2>تجهيز المحل</h2><div class="lead">أول مرة تفتح البرنامج يظهر معالج من 5 خطوات</div></div></div>
+  <p><b>الخطوة 1 — أهلًا بك:</b> تبدأ الفترة التجريبية (20 يومًا). اضغط <b>التالي</b>.</p>
+  <figure class="small"><img src="img/01-welcome.png"><figcaption>شاشة الترحيب</figcaption></figure>
+  <div class="box tip"><b>عندك جهاز قديم عليه البرنامج؟</b> اضغط «عندي نسخة احتياطية من البرنامج — استعادة بيانات محلي» واختر ملف النسخة من الفلاشة، فتنتقل كل بياناتك للجهاز الجديد.</div>
+  <p><b>الخطوة 2 — بيانات المحل:</b> اسم المحل ورقم الهاتف (يظهران على الفاتورة).</p>
+  <figure class="small"><img src="img/02-store.png"><figcaption>بيانات المحل</figcaption></figure>
+</section>
+
+<section>
+  <div class="keep">
+  <p><b>الخطوة 3 — العملة والطباعة وطريقة العمل:</b></p>
+  <ul>
+    <li><b>نوع الطابعة:</b> حرارية 80 مم (الأكثر شيوعًا)، أو 58 مم، أو ورق A4.</li>
+    <li><b>الوضع البسيط:</b> للبقالة والميني ماركت — بيع، مخزون، مشتريات، تقارير.</li>
+    <li><b>الوضع المتقدم:</b> للسوبر ماركت — يضيف <b>تواريخ الصلاحية</b> والدفعات، طلبات الشراء، أسعار الجملة، العروض، وأكثر من مكان تخزين.</li>
+    <li>اترك «إضافة التصنيفات الشائعة» مفعّلة لتجد مشروبات، شيبسي، ألبان… جاهزة.</li>
+  </ul>
+  </div>
+  <figure class="xsmall"><img src="img/03-settings.png"><figcaption>العملة والطباعة وطريقة العمل — كلها قابلة للتغيير لاحقًا من الإعدادات</figcaption></figure>
+  <p><b>الخطوة 4 — حساب المدير:</b> اسمك، واسم دخول، وكلمة مرور. هذا الحساب له كل الصلاحيات.</p>
+  <figure class="xsmall"><img src="img/04-admin.png"><figcaption>حساب المدير</figcaption></figure>
+  <p><b>الخطوة 5 — جاهز:</b> اضغط <b>«ابدأ استخدام البرنامج»</b>.</p>
+  <div class="box warn"><b>احفظ كلمة مرور المدير</b> في مكان آمن — هي مفتاح المحل كله (المستخدمون، الأسعار، التقارير).</div>
+</section>
+
+<!-- ============================================================ 3 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">3</div><div><h2>الشاشة الرئيسية والقائمة</h2><div class="lead">ملخص اليوم + اختصارات لأهم الأعمال</div></div></div>
+  <figure><img src="img/06-dashboard-empty.png"><figcaption>الرئيسية في أول يوم — بطاقة «ابدأ في 3 خطوات» تدلك على البداية</figcaption></figure>
+  <ul>
+    <li><b>في الأعلى:</b> أزرار <b>بيع جديد</b> و<b>منتج جديد</b> و<b>شراء بضاعة</b>.</li>
+    <li><b>البطاقات:</b> مبيعات اليوم، ربح اليوم، النقدية المحصلة، المرتجعات والخصومات.</li>
+    <li><b>«يحتاج انتباهك»:</b> نقص مخزون، صلاحية قريبة، وغيرها.</li>
+    <li><b>القائمة الجانبية (يمين):</b> المبيعات، المنتجات والمخزون، المشتريات، الحسابات، الإدارة. الزر الأخضر <b>بيع جديد</b> (<kbd>F1</kbd>) يفتح شاشة البيع من أي مكان.</li>
+    <li><b>أسفل القائمة:</b> حالة الوردية والنقدية في الدرج، وزر قفل الشاشة وزر تسجيل الخروج.</li>
+    <li><b>الشريط العلوي:</b> يوضح الأيام المتبقية في الفترة التجريبية.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ 4 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">4</div><div><h2>الفترة التجريبية والتفعيل</h2><div class="lead">20 يومًا كاملة بكل المميزات</div></div></div>
+  <ol class="steps">
+    <li>البرنامج يعمل كاملًا لمدة <b>20 يومًا</b> من أول تشغيل.</li>
+    <li>للتفعيل افتح من القائمة <b>الترخيص</b> (أو «تفعيل البرنامج» في الشريط العلوي).</li>
+    <li>اضغط <b>نسخ</b> بجانب <b>كود الجهاز</b> وأرسله للبائع (واتساب مثلًا).</li>
+    <li>سيرسل لك البائع <b>كود التفعيل</b> (يبدأ بحروف <span class="ltr">SBM1</span>) — الصقه في الخانة واضغط <b>تفعيل</b>.</li>
+  </ol>
+  <figure><img src="img/07-license.png"><figcaption>شاشة الترخيص: كود الجهاز للإرسال، وخانة كود التفعيل</figcaption></figure>
+  <div class="box tip"><b>التفعيل بدون إنترنت:</b> الكود مرتبط بهذا الجهاز فقط ويعمل بلا اتصال. بعد انتهاء التجربة لا تُفقد أي بيانات — البرنامج ينتظر كود التفعيل فقط.</div>
+  <div class="box warn"><b>لا تغيّر تاريخ الجهاز للخلف:</b> البرنامج يكتشف ذلك ويوقف العمل حتى يُصحَّح التاريخ.</div>
+</section>
+
+<!-- ============================================================ 5 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">5</div><div><h2>إضافة المنتجات</h2><div class="lead">المنتجات ← منتج جديد</div></div></div>
+  <p>شاشة المنتج تسألك سؤالين بسيطين: <b>«بيتباع إزاي؟»</b> و<b>«بتشتريه في كرتونة / دستة؟»</b> — والبرنامج يحسب الباقي.</p>
+  <div class="example">
+    <div class="t">مثال: بيبسي كانز</div>
+    الزبون يشتري <b>كانز</b>، وأنت تشتري <b>دستة فيها 12 كانز</b> بـ 300 ج.م، وتبيع الكانز بـ 30 ج.م، وعندك الآن 10 دستة و5 كانز فرط.
+  </div>
+  <ol class="steps">
+    <li><b>اسم المنتج</b> و<b>التصنيف</b>، و<b>الباركود</b> (امسحه بالقارئ في الخانة — اختياري).</li>
+    <li><b>بيتباع إزاي؟</b> اختر <b>بالعدد</b>، ثم <b>«الزبون بياخد منه»: كانز</b>.</li>
+    <li>فعّل <b>«بتشتريه في كرتونة / دستة؟»</b> ← اختر <b>دستة</b> واكتب <b>12</b>. يظهر: «1 دستة = 12 كانز».</li>
+    <li><b>سعر بيع الكانز:</b> 30. <b>سعر شراء الدستة:</b> 300 ← يحسب البرنامج تكلفة الكانز (25) والربح (5 ج.م = 16.7%).</li>
+    <li><b>الموجود عندك دلوقتي:</b> <b>10</b> دستة + <b>5</b> كانز = 125 كانز.</li>
+    <li>اختياري: «منتج سريع» ليظهر كزر في شاشة البيع، والحد الأدنى للمخزون للتنبيه.</li>
+    <li>اضغط <b>حفظ</b> (أو «حفظ وإضافة منتج آخر» لإدخال سريع).</li>
+  </ol>
+  <figure><img src="img/10-product-pack.png"><figcaption>منتج يُباع بالكانز ويُشترى بالدستة</figcaption></figure>
+</section>
+
+<section>
+  <div class="box tip"><b>ينطبق على أي منتج:</b> شيبسي (كيس / كرتونة 24)، لبن (علبة / كرتونة 12)، مناديل (باكو / شوال)، زيت (زجاجة / كرتونة). في البيع يُضاف الكيس أو الكانز <b>بضغطة واحدة</b> بلا أي سؤال، وفي الشراء والجرد تتعامل بالكرتونة.</div>
+  <div class="box warn"><b>اختر وحدة البيع صح من البداية:</b> «الزبون بياخد منه» هي أصغر وحدة تبيعها، ولا يمكن تغييرها بعد تسجيل حركات للمنتج. لو سجلت منتجًا بوحدة خطأ: أوقفه وأضفه من جديد.</div>
+  <p>سعر بيع الكرتونة كاملة (جملة) وباركودها اختياريان. البرنامج ينبهك لو سعر الكرتونة أقل من تكلفتها (خسارة) أو أغلى من شراء القطع منفصلة.</p>
+  <h3>منتج بالوزن (جبنة، لحوم، بقوليات سائبة)</h3>
+  <ol class="steps">
+    <li>في «بيتباع إزاي؟» اختر <b>بالوزن (كيلو)</b>.</li>
+    <li>اكتب <b>سعر بيع الكيلو</b> و<b>سعر شراء الكيلو</b> والكمية الموجودة بالكيلو.</li>
+    <li>عند البيع يطلب البرنامج الوزن بالجرام أو المبلغ.</li>
+  </ol>
+  <figure><img src="img/12-product-weight.png"><figcaption>منتج بالوزن — السعر لكل كيلو</figcaption></figure>
+</section>
+
+<section>
+  <h3>صفحة المنتج وقائمة المنتجات</h3>
+  <p>بعد الحفظ تفتح صفحة المنتج: المخزون الحالي (مثلًا «125 كانز — 10 دستة + 5 كانز»)، والوحدات، وسجل الحركات والأسعار.</p>
+  <figure><img src="img/11-product-detail.png"><figcaption>صفحة المنتج</figcaption></figure>
+  <figure><img src="img/13-products.png"><figcaption>قائمة المنتجات — بحث، فلترة بالتصنيف والمخزون، واستيراد من Excel</figcaption></figure>
+  <div class="box tip"><b>عندك منتجات كثيرة؟</b> من صفحة المنتجات اضغط <b>«استيراد من Excel»</b> لإدخالها مرة واحدة.</div>
+</section>
+
+<!-- ============================================================ 6 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">6</div><div><h2>الموردون وفواتير الشراء</h2><div class="lead">كل بضاعة تدخل المحل تُسجل بفاتورة شراء</div></div></div>
+  <h3>إضافة مورد</h3>
+  <p>من القائمة: <b>الموردون ← مورد جديد</b> ← الاسم والهاتف ← حفظ. يتابع البرنامج رصيد كل مورد (المستحق له).</p>
+  <figure class="small"><img src="img/20-supplier.png"><figcaption>مورد جديد</figcaption></figure>
+  <h3>فاتورة شراء</h3>
+  <ol class="steps">
+    <li><b>المشتريات ← فاتورة شراء جديدة</b> (أو «شراء بضاعة» من الرئيسية).</li>
+    <li>اختر <b>المورد</b> (أو «بدون مورد» للشراء النقدي السريع).</li>
+    <li>ابحث عن المنتج بالاسم أو امسح الباركود ثم <kbd>Enter</kbd>.</li>
+    <li>الوحدة تفتح على <b>الدستة / الكرتونة</b> تلقائيًا: اكتب عدد الكراتين وسعر شراء الكرتونة — يظهر «5 × 12 = 60 كانز».</li>
+    <li>اكتب <b>المدفوع الآن</b>؛ الباقي يُضاف لحساب المورد.</li>
+    <li>اضغط <b>حفظ فاتورة الشراء</b> ← يزيد المخزون وتتحدث التكلفة تلقائيًا.</li>
+  </ol>
+  <figure><img src="img/21-purchase.png"><figcaption>شراء 5 دستة بيبسي بـ 300 للدستة = 60 كانز للمخزون</figcaption></figure>
+  <div class="box tip"><b>في الوضع المتقدم</b> يظهر لكل منتج له صلاحية خانة <b>تاريخ الصلاحية</b> ورقم الدفعة — اكتبها من على الكرتونة. البرنامج يبيع الأقرب انتهاءً أولًا، ويمنع بيع المنتهي.</div>
+</section>
+
+<!-- ============================================================ 7 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">7</div><div><h2>البيع</h2><div class="lead">أهم شاشة في البرنامج — مصممة للعمل السريع من لوحة المفاتيح</div></div></div>
+  <h3>فتح الوردية</h3>
+  <p>أول مرة تفتح <b>بيع جديد</b> في اليوم يطلب البرنامج <b>المبلغ الموجود في الدرج</b> (الفكة) لبدء الوردية. اكتبه واضغط «فتح الوردية وبدء البيع».</p>
+  <figure class="half"><img src="img/30-open-shift.png"><figcaption>فتح الوردية</figcaption></figure>
+  <h3>إضافة الأصناف للفاتورة</h3>
+  <ul>
+    <li><b>امسح الباركود</b> بالقارئ — يُضاف الصنف فورًا (المسح مرتين = الكمية 2).</li>
+    <li>أو <b>اكتب جزءًا من الاسم</b> في خانة البحث (<kbd>F2</kbd>) ثم <kbd>Enter</kbd>.</li>
+    <li>أو <b>اضغط على زر المنتج</b> في «المنتجات السريعة» أو حسب التصنيف.</li>
+    <li>غيّر الكمية بأزرار <b>+ / −</b> في السطر، أو اضغط على السطر لتعديل الكمية والسعر والخصم والوحدة (مثلًا بيع دستة كاملة).</li>
+  </ul>
+  <figure><img src="img/32-pos-cart.png"><figcaption>فاتورة فيها 2 كانز بيبسي + كيس شيبسي + 250 جم جبنة = 115 ج.م</figcaption></figure>
+</section>
+
+<section>
+  <h3>منتج بالوزن</h3>
+  <p>عند اختيار منتج بالوزن تظهر نافذة: اكتب <b>الوزن بالجرام</b> (أو اختر 100 / 250 / 500…)، أو <b>بالمبلغ</b> (الزبون عايز بـ 50 جنيه) — ثم <b>إضافة</b>.</p>
+  <figure class="small"><img src="img/31-weight.png"><figcaption>250 جم جبنة رومي = 45 ج.م</figcaption></figure>
+  <h3>اختصارات لوحة المفاتيح</h3>
+  <table>
+    <tr><th>الزر</th><th>الوظيفة</th><th>الزر</th><th>الوظيفة</th></tr>
+    <tr><td class="k"><kbd>F1</kbd></td><td>بيع جديد</td><td class="k"><kbd>F6</kbd></td><td>تعليق الفاتورة (زبون نسي حاجة)</td></tr>
+    <tr><td class="k"><kbd>F2</kbd></td><td>البحث عن منتج</td><td class="k"><kbd>F7</kbd></td><td>الفواتير المعلقة</td></tr>
+    <tr><td class="k"><kbd>F3</kbd></td><td>تعديل الكمية</td><td class="k"><kbd>F8</kbd></td><td>خصم على الفاتورة كلها</td></tr>
+    <tr><td class="k"><kbd>F4</kbd></td><td>خصم على صنف</td><td class="k"><kbd>F9</kbd></td><td><b>الدفع</b></td></tr>
+    <tr><td class="k"><kbd>Del</kbd></td><td>حذف السطر المحدد</td><td class="k"><kbd>Esc</kbd></td><td>إلغاء / رجوع</td></tr>
+  </table>
+</section>
+
+<section>
+  <div class="keep">
+  <h3>الدفع</h3>
+  <ol class="steps">
+    <li>اضغط <kbd>F9</kbd> أو زر <b>الدفع</b>.</li>
+    <li>اختر طريقة الدفع: <b>نقدي</b> أو <b>كارت</b> أو <b>محفظة</b> أو <b>آجل</b> (على حساب عميل).</li>
+    <li>اكتب <b>المبلغ المستلم</b> أو اضغط أحد الأزرار الجاهزة — يظهر <b>الباقي للعميل</b>.</li>
+    <li><kbd>Enter</kbd> أو <b>تأكيد وحفظ الفاتورة</b>.</li>
+  </ol>
+  <figure class="half"><img src="img/33-payment.png"><figcaption>الدفع: المطلوب 115، المستلم 200، الباقي 85</figcaption></figure>
+  </div>
+  <p>بعد الحفظ تظهر الفاتورة: <b>طباعة</b> (<kbd>Ctrl+P</kbd>) أو <b>حفظ PDF</b>، و<kbd>Enter</kbd> لبدء فاتورة جديدة.</p>
+  <figure><img src="img/34-receipt.png"><figcaption>الفاتورة جاهزة للطباعة</figcaption></figure>
+  <div class="box tip"><b>البيع الآجل:</b> اختر «آجل» واختر العميل — يُسجل الدين في «العملاء والمديونيات». يمكن تحديد حد أقصى لمديونية كل عميل.</div>
+  <div class="box warn"><b>الخصومات الكبيرة:</b> الكاشير له حد خصم؛ لو تجاوزه يطلب البرنامج <b>موافقة المدير</b> باسمه وكلمة مروره، ويسجّل من وافق.</div>
+</section>
+
+<!-- ============================================================ 8 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">8</div><div><h2>الفواتير والمرتجعات</h2><div class="lead">كل فاتورة محفوظة ويمكن الرجوع لها</div></div></div>
+  <p>من القائمة: <b>الفواتير</b> ← ابحث برقم الفاتورة أو التاريخ ← اضغط على الفاتورة لعرضها، طباعتها مرة أخرى، أو عمل مرتجع.</p>
+  <figure class="half"><img src="img/40-invoice.png"><figcaption>تفاصيل الفاتورة</figcaption></figure>
+  <h3>مرتجع من فاتورة</h3>
+  <ol class="steps">
+    <li>من الفاتورة اضغط <b>مرتجع</b>.</li>
+    <li>اكتب الكمية المرتجعة لكل صنف (أو <b>الكل</b>). «يرجع للمخزون؟» — اترك العلامة لو المنتج سليم، وألغها لو تالف.</li>
+    <li>اختر طريقة رد المبلغ واكتب السبب ← <b>تأكيد المرتجع</b>.</li>
+  </ol>
+  <figure class="half"><img src="img/41-return.png"><figcaption>مرتجع جزئي من فاتورة</figcaption></figure>
+</section>
+
+<!-- ============================================================ 9 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">9</div><div><h2>الجرد</h2><div class="lead">قارن الموجود على الرف بالموجود في البرنامج</div></div></div>
+  <ol class="steps">
+    <li><b>الجرد ← بدء جرد جديد</b> ← كل المنتجات أو تصنيف واحد (مثلًا المشروبات).</li>
+    <li>لكل منتج اكتب الموجود فعلًا. المنتجات التي لها كرتونة تُعد هكذا: <b>[14] دستة + [2] كانز</b>.</li>
+    <li>يظهر <b>الفرق</b> و<b>قيمته</b> فورًا (بالسالب = عجز).</li>
+    <li>عند الانتهاء <b>اعتماد الجرد</b> ← يُصحح المخزون ويُسجل الفرق. الأصناف التي لم تُعد لا تتغير.</li>
+  </ol>
+  <figure><img src="img/50-stocktake.png"><figcaption>الجرد بالدستة والكانز — النظام يعرض الرصيد بنفس الشكل</figcaption></figure>
+  <div class="box tip">يمكنك الاستمرار في البيع أثناء الجرد. ابدأ بتصنيف واحد كل أسبوع بدل جرد المحل كله مرة واحدة.</div>
+</section>
+
+<!-- ============================================================ 10 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">10</div><div><h2>المستخدمون والصلاحيات</h2><div class="lead">لكل شخص اسم دخول خاص</div></div></div>
+  <ol class="steps">
+    <li><b>المستخدمون والصلاحيات ← مستخدم جديد</b>.</li>
+    <li>الاسم، اسم الدخول، كلمة المرور، والدور: <b>كاشير</b> أو مدير أو أمين مخزن…</li>
+  </ol>
+  <figure class="small"><img src="img/60-user.png"><figcaption>إضافة كاشير</figcaption></figure>
+  <figure class="half"><img src="img/61-users.png"><figcaption>قائمة المستخدمين</figcaption></figure>
+  <ul>
+    <li><b>الكاشير</b> يرى شاشة البيع وورديته فقط — لا يرى التكلفة ولا الأرباح ولا يعدّل الأسعار.</li>
+    <li>العمليات الحساسة (خصم كبير، إلغاء فاتورة، بيع آجل) تحتاج موافقة مدير وتُسجل في <b>سجل العمليات</b>.</li>
+    <li>عند ترك الجهاز اضغط زر <b>القفل</b> أسفل القائمة.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ 11 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">11</div><div><h2>الورديات وإغلاق اليوم</h2><div class="lead">آخر اليوم: عد الدرج وأغلق</div></div></div>
+  <h3>الوردية</h3>
+  <p><b>الورديات والخزنة</b> تعرض ورديتك: النقدية المتوقعة في الدرج، المبيعات، طرق الدفع. من هنا: <b>سحب / إضافة نقدية</b> (مصروف سريع أو تغذية فكة) و<b>إغلاق الوردية</b>: تعد النقدية الفعلية ويحسب البرنامج العجز أو الزيادة.</p>
+  <figure><img src="img/70-shifts.png"><figcaption>الوردية الحالية: 500 افتتاحي + 115 مبيعات نقدية = 615 متوقع في الدرج</figcaption></figure>
+</section>
+
+<section>
+  <h3>إغلاق اليوم</h3>
+  <p><b>إغلاق اليوم</b> يجمع اليوم كله: صافي المبيعات، تكلفة البضاعة، مجمل الربح، المصروفات، صافي الربح، المقبوض بكل طريقة، والورديات. راجع الأرقام ثم <b>إغلاق اليوم</b> (ويمكن طباعته).</p>
+  <figure><img src="img/71-day-close.png"><figcaption>ملخص اليوم: مبيعات 115، تكلفة 93، ربح 22</figcaption></figure>
+  <div class="box tip">سجّل مصروفات المحل (كهرباء، إيجار، نقل…) من <b>المصروفات</b> ليظهر صافي الربح الحقيقي.</div>
+</section>
+
+<!-- ============================================================ 12 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">12</div><div><h2>النسخ الاحتياطي</h2><div class="lead">أهم عادة لحماية بيانات محلك</div></div></div>
+  <figure><img src="img/62-backup.png"><figcaption>النسخ الاحتياطي</figcaption></figure>
+  <ul>
+    <li><b>إنشاء نسخة الآن:</b> نسخة فورية على الجهاز.</li>
+    <li><b>حفظ نسخة على فلاشة:</b> الأهم — لو تعطل الجهاز أو القرص تبقى بياناتك سليمة.</li>
+    <li><b>نسخ احتياطي تلقائي</b> و<b>نسخة عند إغلاق اليوم:</b> فعّلهما — البرنامج يحفظ ويتحقق من كل نسخة ويحتفظ بآخر 30.</li>
+    <li><b>استعادة نسخة:</b> يأخذ البرنامج نسخة أمان من البيانات الحالية قبل الاستبدال، ويرفض أي ملف تالف.</li>
+  </ul>
+  <div class="box bad"><b>مرة في الأسبوع على الأقل:</b> «حفظ نسخة على فلاشة» واحتفظ بالفلاشة بعيدًا عن الجهاز. البرنامج يذكّرك لو مرت 7 أيام بلا نسخة.</div>
+  <div class="box tip"><b>جهاز جديد؟</b> ثبّت البرنامج، وفي أول شاشة اختر «عندي نسخة احتياطية» واختر ملف النسخة من الفلاشة.</div>
+</section>
+
+<!-- ============================================================ 13 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">13</div><div><h2>الإعدادات والطابعة</h2><div class="lead">الإعدادات (للمدير)</div></div></div>
+  <figure><img src="img/63-settings.png"><figcaption>الإعدادات</figcaption></figure>
+  <table>
+    <tr><th>التبويب</th><th>ماذا تضبط فيه</th></tr>
+    <tr><td class="k">بيانات المحل</td><td>الاسم، الهاتف، العنوان، الشعار، رسالة أسفل الفاتورة، العملة.</td></tr>
+    <tr><td class="k">الوضع والمميزات</td><td>البسيط / المتقدم، وتشغيل المميزات: الصلاحية، أسعار الجملة، العروض، أكثر من مكان تخزين.</td></tr>
+    <tr><td class="k">البيع</td><td>أقصى خصم للكاشير بدون موافقة مدير، مدة قبول المرتجع، بادئة رقم الفاتورة، تقريب الإجمالي، الضريبة، باركود الميزان.</td></tr>
+    <tr><td class="k">المخزون</td><td>أيام تنبيه الصلاحية (7 / 30 / 90)، متى يعتبر المنتج راكدًا، ومدة تغطية اقتراحات الطلب.</td></tr>
+    <tr><td class="k">الطباعة</td><td>نوع الورق: <b>حراري 80 مم</b> أو <b>58 مم</b> أو <b>A4</b>، واختيار الطابعة، وعدد النسخ.</td></tr>
+    <tr><td class="k">العرض</td><td>شكل الأرقام وحجم الخط.</td></tr>
+  </table>
+  <div class="box warn"><b>قبل أول يوم بيع:</b> اطبع فاتورة تجربة على طابعتك وتأكد من العرض والخط. لو الكلام مقطوع غيّر نوع الورق (80 ↔ 58).</div>
+</section>
+
+<!-- ============================================================ 14 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">14</div><div><h2>بعد ما المحل يشتغل</h2><div class="lead">صور من محل بعد عدة أشهر من الاستخدام</div></div></div>
+  <h3>الرئيسية والتنبيهات</h3>
+  <p>تتحول الرئيسية لملخص ذكي: <b>«ماذا يحتاج المحل هذا الشهر؟»</b> (صلاحية قريبة، مخزون راكد، طلب مقترح من المورد، عرض مقترح)، و<b>«يحتاج انتباهك»</b> مثل: «⚠️ يوجد 72 قطعة من زبادي جهينة ستنتهي خلال 5 أيام».</p>
+  <figure><img src="img/81-dashboard.png"><figcaption>الرئيسية في محل يعمل منذ أشهر</figcaption></figure>
+</section>
+
+<section>
+  <h3>الصلاحية (الوضع المتقدم)</h3>
+  <p>شاشة <b>الصلاحية</b> تعرض كل دفعة: منتهي / قريب جدًا (7 أيام) / قريب (30) / متابعة (90)، مع الكمية والمورد والقيمة والأيام المتبقية والإجراء المقترح. من نفس الصف: <b>إرجاع للمورد</b> (من الدفعة نفسها) أو <b>إعدام</b>.</p>
+  <figure><img src="img/82-expiry.png"><figcaption>الصلاحية</figcaption></figure>
+  <div class="box bad"><b>البرنامج يمنع بيع أي كمية منتهية الصلاحية</b> ويخرج الأقرب انتهاءً أولًا تلقائيًا.</div>
+</section>
+
+<section>
+  <h3>اقتراحات البيع</h3>
+  <p>يحلل البرنامج مبيعات آخر 30 يومًا: ما الذي عليه سحب قوي، ما الراكد، ما يُشترى معًا، ويقترح عروضًا محسوبة ربحيتها. <b>لا يُفعَّل أي عرض أو سعر بدون موافقتك.</b></p>
+  <figure><img src="img/83-insights.png"><figcaption>اقتراحات البيع</figcaption></figure>
+  <h3>التقارير</h3>
+  <p>المبيعات والأرباح بالفترة، الأكثر مبيعًا والأكثر ربحًا، المخزون وقيمته، المشتريات، الموردون والعملاء.</p>
+  <figure><img src="img/84-reports.png"><figcaption>التقارير</figcaption></figure>
+</section>
+
+<!-- ============================================================ 15 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">15</div><div><h2>روتين يومي وأسبوعي</h2><div class="lead">اطبع هذه الصفحة وعلّقها بجانب الجهاز</div></div></div>
+  <div class="flow"><span>فتح الوردية</span><i>←</i><span>البيع</span><i>←</i><span>تسجيل البضاعة الواردة</span><i>←</i><span>إغلاق الوردية</span><i>←</i><span>إغلاق اليوم</span><i>←</i><span>نسخة احتياطية</span></div>
+  <div class="two">
+    <div>
+      <h3>كل يوم</h3>
+      <ul class="check">
+        <li>بيع جديد ← فتح الوردية بمبلغ الفكة.</li>
+        <li>أي بضاعة تدخل: فاتورة شراء فورًا.</li>
+        <li>أي مصروف من الدرج: «سحب نقدية» أو المصروفات.</li>
+        <li>آخر الوردية: عد الدرج ← إغلاق الوردية.</li>
+        <li>آخر اليوم: إغلاق اليوم ومراجعة الربح.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>كل أسبوع</h3>
+      <ul class="check">
+        <li>حفظ نسخة احتياطية على فلاشة.</li>
+        <li>جرد تصنيف أو اثنين.</li>
+        <li>مراجعة «يحتاج انتباهك» والصلاحية.</li>
+        <li>متابعة أرصدة الموردين والعملاء.</li>
+      </ul>
+      <h3>كل شهر</h3>
+      <ul class="check">
+        <li>مراجعة «اقتراحات البيع» والتقارير.</li>
+        <li>تحديث الأسعار عند تغير أسعار الموردين.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 16 -->
+<section class="ch">
+  <div class="ch-head"><div class="ch-num">16</div><div><h2>مشاكل شائعة وحلها</h2></div></div>
+  <table>
+    <tr><th>المشكلة</th><th>الحل</th></tr>
+    <tr><td>رسالة «Windows protected your PC» عند التثبيت</td><td>طبيعي لأن البرنامج غير موقّع بشهادة: <b class="ltr">More info</b> ← <b class="ltr">Run anyway</b>.</td></tr>
+    <tr><td>المتصفح يمنع تحميل ملف التثبيت</td><td>من قائمة التنزيلات اختر «الاحتفاظ بالملف» (Keep)، أو استخدم متصفحًا آخر.</td></tr>
+    <tr><td>قارئ الباركود لا يضيف المنتج</td><td>تأكد أن المؤشر في خانة البحث (<kbd>F2</kbd>) وأن الباركود مسجل في المنتج. جرب المسح في برنامج «المفكرة» للتأكد أن القارئ يعمل.</td></tr>
+    <tr><td>منتج بالعدد يسأل عن الوزن</td><td>من إصدار 1.1.1 لا يحدث ذلك. لو المنتج قديم ووحدته خطأ: أوقفه وأضفه من جديد بالوحدة الصحيحة.</td></tr>
+    <tr><td>الطباعة مقطوعة أو صغيرة</td><td>الإعدادات ← الطباعة ← غيّر نوع الورق (80 / 58 مم) واطبع فاتورة تجربة.</td></tr>
+    <tr><td>انقطاع الكهرباء أثناء البيع</td><td>كل فاتورة محفوظة لحظة تأكيدها. بعد التشغيل افتح الفواتير للتأكد من آخر فاتورة.</td></tr>
+    <tr><td>رسالة أن البيانات تالفة عند الفتح</td><td>تظهر شاشة إصلاح: اختر «استعادة» وآخر نسخة احتياطية سليمة.</td></tr>
+    <tr><td>«لا يمكن بيع… منتهي الصلاحية»</td><td>الكمية الصالحة لا تكفي. سجّل المنتهي كتالف أو أرجعه للمورد من شاشة الصلاحية.</td></tr>
+    <tr><td>انتهت الفترة التجريبية</td><td>الترخيص ← انسخ كود الجهاز وأرسله للبائع ← الصق كود التفعيل. لا تُفقد أي بيانات.</td></tr>
+    <tr><td>نسي الكاشير كلمة المرور</td><td>المدير: المستخدمون والصلاحيات ← تعديل المستخدم ← كلمة مرور جديدة.</td></tr>
+    <tr><td>نقل المحل لجهاز جديد</td><td>على القديم: حفظ نسخة على فلاشة. على الجديد: ثبّت البرنامج ← «عندي نسخة احتياطية» ← اختر الملف ← اطلب كود تفعيل للجهاز الجديد.</td></tr>
+  </table>
+  <div class="box tip" style="margin-top:14px"><b>للدعم:</b> أرسل للبائع صورة الشاشة ورقم الإصدار (يظهر في شاشة الترخيص).</div>
+</section>
+
+</body>
+</html>

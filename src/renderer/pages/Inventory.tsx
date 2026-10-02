@@ -204,10 +204,10 @@ function ExpiryTab() {
                 {can('reports.cost') && <td className="n small">{money(Math.round(b.unit_cost))}<div className="bold">{money(b.value)}</div></td>}
                 <td className="n small">{qty(b.perDay)}</td>
                 <td className="small">{ACTION[b.action]}{b.unsold > 0 && b.tier !== 'expired' ? <div className="xs muted">لن يُباع منها تقريبًا {qty(b.unsold)}</div> : null}</td>
-                <td className="row" style={{ gap: 4 }}>
+                <td><div className="row" style={{ gap: 4 }}>
                   {can('purchases.manage') && <button className="btn sm" onClick={() => setRet(b)}>إرجاع للمورد</button>}
                   {b.tier === 'expired' && can('inventory.adjust') && <button className="btn sm danger outline" onClick={() => dispose(b)}>إعدام</button>}
-                </td>
+                </div></td>
               </tr>
             ))}</tbody></table>
         )}

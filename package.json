@@ -17,6 +17,8 @@
     "test:e2e": "playwright test",
     "dist:linux": "npm run build && electron-builder --linux deb AppImage",
     "dist:win": "npm run build && electron-builder --win nsis",
+    "guide:capture": "npm run build && node scripts/build-main.mjs --tools && playwright test --config scripts/guide/playwright.config.ts",
+    "guide:pdf": "electron scripts/guide/build-pdf.cjs",
     "license:keygen": "node tools/license/keygen.mjs",
     "license:issue": "node tools/license/issue.mjs",
     "typecheck:sim": "tsc -p tsconfig.sim.json --noEmit",

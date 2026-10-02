@@ -41,10 +41,10 @@ function SimpleList({ kind }: { kind: 'categories' | 'brands' }) {
           <tr key={c.id}>
             <td>{edit?.id === c.id ? <input className="input" autoFocus value={edit!.name} onChange={(e) => setEdit({ id: c.id, name: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') void run(async () => { await api(`${kind}.save`, { id: c.id, name: edit!.name, active: true }); setEdit(null); await list.refetch(); }); if (e.key === 'Escape') setEdit(null); }} /> : <span className="bold" onDoubleClick={() => setEdit({ id: c.id, name: c.name })}>{c.name}</span>}</td>
             <td className="n muted small">{c.product_count} منتج</td>
-            <td className="row gap-sm" style={{ justifyContent: 'flex-end' }}>
+            <td><div className="row gap-sm" style={{ justifyContent: 'flex-end' }}>
               <button className="btn sm" onClick={() => setEdit({ id: c.id, name: c.name })}>تعديل</button>
               <button className="btn ghost sm icon" onClick={async () => { if ((await confirm({ title: 'حذف', message: `حذف "${c.name}"؟`, danger: true, confirmText: 'حذف' })).ok) void run(async () => { await api(`${kind}.delete`, { id: c.id }); await list.refetch(); }); }}><Trash2 size={14} /></button>
-            </td>
+            </div></td>
           </tr>
         ))}</tbody></table>
       )}
