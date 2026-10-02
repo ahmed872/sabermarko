@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>سابر ماركو — منشورات السوق السعودي</title>
+<!-- Marketing images for the Saudi market. Rendered to PNG by scripts/marketing/render.cjs (one post per #id).
+     Edit OFFER below (prices, contact) and re-render: npx electron scripts/marketing/render.cjs -->
+<style>
+  @font-face { font-family: Plex; font-weight: 400; src: url('../../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-400-normal.woff2'); }
+  @font-face { font-family: Plex; font-weight: 600; src: url('../../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-600-normal.woff2'); }
+  @font-face { font-family: Plex; font-weight: 700; src: url('../../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-700-normal.woff2'); }
+  @font-face { font-family: PlexL; font-weight: 400; src: url('../../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-latin-400-normal.woff2'); }
+  @font-face { font-family: PlexL; font-weight: 700; src: url('../../node_modules/@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-latin-700-normal.woff2'); }
+  :root { --g1: #0f766e; --g2: #0a3d3f; --g3: #062a2c; --gold: #e2b54a; --gold-d: #b8892a; --ink: #10201f; --cream: #fbf7ee; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #222; }
+  body { font-family: Plex, PlexL, sans-serif; }
+  .post { width: 1080px; height: 1080px; position: relative; overflow: hidden; display: none; color: #fff;
+    background: radial-gradient(1200px 700px at 85% -10%, #138a80 0%, transparent 60%), linear-gradient(160deg, var(--g2), var(--g3)); }
+  .post.story { height: 1920px; }
+  .post.on { display: block; }
+  /* subtle geometric pattern */
+  .post::before { content: ''; position: absolute; inset: 0; opacity: .07;
+    background-image: radial-gradient(circle at 0 0, transparent 38px, #fff 39px, #fff 40px, transparent 41px), radial-gradient(circle at 60px 60px, transparent 38px, #fff 39px, #fff 40px, transparent 41px);
+    background-size: 120px 120px; }
+  .post.light { background: linear-gradient(180deg, var(--cream), #f3ead6); color: var(--ink); }
+  .post.light::before { opacity: .05; filter: invert(1); }
+  .pad { position: absolute; inset: 0; padding: 70px 72px; display: flex; flex-direction: column; }
+  .brand { display: flex; align-items: center; gap: 14px; font-weight: 700; font-size: 30px; }
+  .brand .logo { width: 58px; height: 58px; border-radius: 16px; background: var(--gold); color: var(--g3); display: flex; align-items: center; justify-content: center; font-size: 32px; }
+  .light .brand .logo { background: var(--g1); color: #fff; }
+  .kicker { display: inline-block; align-self: flex-start; background: rgba(226, 181, 74, .16); color: var(--gold); border: 2px solid rgba(226, 181, 74, .5); padding: 6px 22px; border-radius: 999px; font-weight: 700; font-size: 28px; margin-top: 44px; }
+  .light .kicker { color: var(--gold-d); background: rgba(184, 137, 42, .1); border-color: rgba(184, 137, 42, .4); }
+  h1 { font-size: 82px; line-height: 1.18; font-weight: 700; margin-top: 22px; letter-spacing: -.5px; }
+  h1 em { font-style: normal; color: var(--gold); }
+  .light h1 em { color: var(--g1); }
+  .sub { font-size: 34px; line-height: 1.55; opacity: .9; margin-top: 18px; }
+  .cta { align-self: flex-start; background: var(--gold); color: var(--g3); font-weight: 700; font-size: 34px; padding: 18px 40px; border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+  .light .cta { background: var(--g1); color: #fff; }
+  .foot { position: absolute; bottom: 56px; inset-inline: 72px; display: flex; justify-content: space-between; align-items: center; font-size: 26px; opacity: .85; }
+  /* device frame */
+  .laptop { position: absolute; }
+  .laptop .screen { background: #0c1414; border-radius: 22px 22px 0 0; padding: 16px 16px 0; box-shadow: 0 40px 90px rgba(0,0,0,.45); }
+  .laptop .screen img { display: block; width: 100%; border-radius: 8px 8px 0 0; }
+  .laptop .base { height: 26px; background: linear-gradient(#cfd5d8, #9aa3a8); border-radius: 0 0 26px 26px; margin: 0 -40px; box-shadow: 0 20px 40px rgba(0,0,0,.35); }
+  .shot { position: absolute; border-radius: 22px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.4); border: 6px solid rgba(255,255,255,.9); background: #fff; }
+  .shot img { display: block; }
+  .chip { position: absolute; background: #fff; color: var(--ink); border-radius: 20px; padding: 18px 26px; font-weight: 700; font-size: 30px; box-shadow: 0 18px 40px rgba(0,0,0,.3); display: flex; align-items: center; gap: 12px; }
+  .chip small { display: block; font-size: 22px; font-weight: 400; color: #5b6676; }
+  .chip .dot { width: 46px; height: 46px; border-radius: 12px; background: var(--g1); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26px; flex: none; }
+  .chip.warn .dot { background: #e0a100; }
+  .chip.bad .dot { background: #d13b3b; }
+  .list { list-style: none; margin-top: 30px; display: grid; gap: 18px; }
+  .list li { font-size: 34px; display: flex; gap: 16px; align-items: center; }
+  .list li b { color: var(--gold); font-size: 36px; width: 46px; height: 46px; border-radius: 12px; background: rgba(226,181,74,.15); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 30px; }
+  .feat { background: rgba(255,255,255,.07); border: 1.5px solid rgba(255,255,255,.14); border-radius: 24px; padding: 20px 28px; }
+  .feat .ic { font-size: 38px; }
+  .feat .t { font-size: 32px; font-weight: 700; margin-top: 8px; }
+  .feat .d { font-size: 24px; opacity: .8; margin-top: 4px; line-height: 1.5; }
+  /* pricing */
+  .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 40px; }
+  .plan { background: #fff; color: var(--ink); border-radius: 26px; padding: 30px 24px 26px; text-align: center; position: relative; }
+  .plan.best { background: var(--gold); transform: translateY(-14px); box-shadow: 0 24px 50px rgba(0,0,0,.35); }
+  .plan .badge { position: absolute; top: -20px; inset-inline: 0; margin: 0 auto; width: max-content; background: var(--g3); color: var(--gold); font-weight: 700; font-size: 22px; padding: 6px 18px; border-radius: 999px; }
+  .plan .n { font-size: 32px; font-weight: 700; }
+  .plan .u { font-size: 24px; color: #4f5b5a; margin-top: 4px; }
+  .plan .old { font-size: 26px; color: #8a8f94; text-decoration: line-through; margin-top: 18px; font-family: PlexL, Plex; }
+  .plan .p { font-size: 62px; font-weight: 700; line-height: 1; margin-top: 4px; font-family: PlexL, Plex; white-space: nowrap; }
+  .plan .p small { font-size: 28px; font-family: Plex; }
+  .plan .once { font-size: 22px; margin-top: 10px; color: #4f5b5a; }
+  .incl { margin-top: 34px; display: flex; flex-wrap: wrap; gap: 12px 26px; font-size: 27px; }
+  .incl span::before { content: '✓ '; color: var(--gold); font-weight: 700; }
+  .note { font-size: 21px; opacity: .65; margin-top: 18px; }
+</style>
+</head>
+<body>
+
+<!-- 1. hero -->
+<div class="post" id="hero"><div class="pad">
+  <div class="brand"><div class="logo">ب</div>سابر ماركو</div>
+  <div class="kicker">برنامج كاشير للتموينات والسوبرماركت</div>
+  <h1>محلك يستاهل<br><em>كاشير عربي</em> يفهمه</h1>
+  <div class="sub">بيع بالباركود، بالحبة والكرتون والوزن —<br>ويشتغل <b>بدون إنترنت</b>.</div>
+  <div class="laptop" style="top: 560px; left: 150px; width: 780px;"><div class="screen"><img src="../../docs/marketing/sa/shots/pos.png"></div><div class="base"></div></div>
+  <div class="chip" style="top: 610px; right: 40px;"><div class="dot">✓</div><div>الفاتورة جاهزة<small>119 ر.س — الباقي 81</small></div></div>
+  <div class="chip warn" style="top: 860px; left: 40px;"><div class="dot">⚡</div><div>بدون نت؟<small>البيع ما يوقف</small></div></div>
+</div></div>
+
+<!-- 2. piece + carton -->
+<div class="post light" id="pack"><div class="pad">
+  <div class="brand"><div class="logo">ب</div>سابر ماركو</div>
+  <div class="kicker">بالحبة أو بالكرتون… أنت تحدد</div>
+  <h1>تشتري <em>كرتون</em><br>وتبيع <em>بالحبة</em></h1>
+  <div class="sub">سعر الكرتون ينقسم على الحبة لحاله، والجرد:<br><b>12 كرتون + 8 حبة</b> — بدون آلة حاسبة.</div>
+  <div class="shot" style="top: 610px; left: 72px; width: 936px; height: 390px;"><img src="../../docs/marketing/sa/shots/product-pack.png" style="width: 1300px; margin: -330px -40px 0 0; float: right;"></div>
+  <div class="chip" style="top: 560px; left: 60px;"><div class="dot">=</div><div>1 كرتون = 30 حبة<small>تكلفة الحبة 1.90 ر.س</small></div></div>
+</div></div>
+
+<!-- 3. expiry -->
+<div class="post" id="expiry"><div class="pad">
+  <div class="brand"><div class="logo">ب</div>سابر ماركو</div>
+  <div class="kicker">الصلاحية تحت السيطرة</div>
+  <h1>ينبّهك <em>قبل</em><br>ما تخرب البضاعة</h1>
+  <div class="sub">ويبيع الأقرب انتهاءً أول —<br>و<b>ما يسمح أبدًا ببيع منتهي الصلاحية</b>.</div>
+  <div class="shot" style="top: 660px; left: 72px; width: 936px; height: 240px;"><img src="../../docs/marketing/sa/shots/expiry.png" style="width: 1180px; margin: -150px -10px 0 0; float: right;"></div>
+  <div class="chip bad" style="top: 585px; right: 60px;"><div class="dot">!</div><div>46 علبة حليب تنتهي خلال 6 أيام<small>إرجاع للمورد أو عرض تصريف</small></div></div>
+</div></div>
+
+<!-- 4. profit -->
+<div class="post light" id="profit"><div class="pad">
+  <div class="brand"><div class="logo">ب</div>سابر ماركو</div>
+  <div class="kicker">أرقامك واضحة</div>
+  <h1>اعرف <em>ربحك</em><br>كل يوم</h1>
+  <div class="sub">مبيعات اليوم، الربح بعد التكلفة، الأكثر مبيعًا<br>والأكثر ربحًا، وإغلاق يومي يطابق الدرج.</div>
+  <div class="laptop" style="top: 600px; left: 150px; width: 780px;"><div class="screen"><img src="../../docs/marketing/sa/shots/dashboard.png"></div><div class="base"></div></div>
+  <div class="chip" style="top: 640px; right: 36px;"><div class="dot">↑</div><div>ربح اليوم<small>بعد خصم التكلفة</small></div></div>
+</div></div>
+
+<!-- 5. everything -->
+<div class="post" id="features"><div class="pad">
+  <div class="brand"><div class="logo">ب</div>سابر ماركو</div>
+  <h1 style="font-size: 64px; margin-top: 30px;">كل اللي يحتاجه <em>محلك</em></h1>
+  <div class="grid">
+    <div class="feat"><div class="ic">⚡</div><div class="t">بيع سريع بالباركود</div><div class="d">مسح، دفع، طباعة — من الكيبورد</div></div>
+    <div class="feat"><div class="ic">📦</div><div class="t">حبة وكرتون ووزن</div><div class="d">التمر والقهوة بالكيلو أو بالمبلغ</div></div>
+    <div class="feat"><div class="ic">⏳</div><div class="t">تواريخ الصلاحية</div><div class="d">تنبيه مبكر ومنع بيع المنتهي</div></div>
+    <div class="feat"><div class="ic">🧾</div><div class="t">فاتورة بالريال</div><div class="d">حرارية 80 / 58 مم أو A4</div></div>
+    <div class="feat"><div class="ic">👥</div><div class="t">كاشير ومدير</div><div class="d">صلاحيات، موافقة على الخصم</div></div>
+    <div class="feat"><div class="ic">💾</div><div class="t">نسخ احتياطي</div><div class="d">تلقائي، وعلى فلاشة</div></div>
+  </div>
+  <div class="foot"><span>يشتغل على ويندوز 10 / 11 — بدون إنترنت</span><span class="cta" style="font-size: 28px; padding: 12px 28px;">جرّبه 20 يوم مجانًا</span></div>
+</div></div>
+
+<!-- 6. offer -->
+<div class="post" id="offer"><div class="pad">
+  <div class="brand"><div class="logo">ب</div>سابر ماركو</div>
+  <div class="kicker">عرض الإطلاق في السعودية</div>
+  <h1 style="font-size: 72px;">ادفع <em>مرة وحدة</em><br>بدون اشتراك شهري</h1>
+  <div class="plans" id="plans"></div>
+  <div class="incl"><span>ترخيص دائم</span><span>تجربة 20 يوم مجانًا</span><span>يشتغل بدون نت</span><span>عربي بالكامل</span></div>
+  <div class="note" id="note"></div>
+</div></div>
+
+<!-- 7. try free -->
+<div class="post light" id="trial"><div class="pad">
+  <div class="brand"><div class="logo">ب</div>سابر ماركو</div>
+  <div class="kicker">بدون التزام</div>
+  <h1>جرّبه في محلك<br><em>20 يوم مجانًا</em></h1>
+  <ul class="list" style="margin-top: 40px; margin-inline-start: 0; width: 560px;">
+    <li><b>1</b> نزّل البرنامج على جهاز الكاشير</li>
+    <li><b>2</b> أدخل اسم المحل وأضف منتجاتك</li>
+    <li><b>3</b> ابدأ البيع — وإذا عجبك فعّله بكود</li>
+  </ul>
+  <div class="shot" style="top: 600px; left: 72px; width: 392px; height: 420px;"><img src="../../docs/marketing/sa/shots/receipt.png" style="position: absolute; width: 1440px; left: -326px; top: -172px;"></div>
+  <div class="cta" style="position: absolute; bottom: 110px; right: 72px;" id="trial-cta">راسلنا الحين</div>
+</div></div>
+
+<!-- 8. story -->
+<div class="post story" id="story"><div class="pad" style="padding: 110px 80px;">
+  <div class="brand" style="font-size: 36px;"><div class="logo" style="width: 70px; height: 70px; font-size: 38px;">ب</div>سابر ماركو</div>
+  <div class="kicker" style="font-size: 34px; margin-top: 70px;">برنامج كاشير للتموينات والسوبرماركت</div>
+  <h1 style="font-size: 104px; margin-top: 34px;">بيع أسرع…<br><em>وحسابات أوضح</em></h1>
+  <ul class="list" style="margin-top: 50px;">
+    <li><b>✓</b> بالحبة والكرتون والوزن</li>
+    <li><b>✓</b> يمنع بيع منتهي الصلاحية</li>
+    <li><b>✓</b> ربحك وجردك بضغطة</li>
+    <li><b>✓</b> يشتغل بدون إنترنت</li>
+  </ul>
+  <div class="laptop" style="top: 1010px; left: 110px; width: 860px;"><div class="screen"><img src="../../docs/marketing/sa/shots/pos.png"></div><div class="base"></div></div>
+  <div class="cta" style="position: absolute; bottom: 140px; inset-inline: 80px; text-align: center; font-size: 44px; padding: 26px;">جرّبه 20 يوم مجانًا</div>
+</div></div>
+
+<script>
+  // ---- editable offer (Saudi riyal, one-time permanent license per device) ----
+  const OFFER = {
+    plans: [
+      { name: 'الأساسية', users: 'كاشير + مدير (2 مستخدم)', old: 699, price: 499 },
+      { name: 'القياسية', users: '5 مستخدمين', old: 1099, price: 799, best: true },
+      { name: 'الاحترافية', users: '15 مستخدم', old: 1799, price: 1299 },
+    ],
+    note: 'الأسعار بالريال السعودي لجهاز واحد، شاملة ضريبة القيمة المضافة. العرض لفترة محدودة.',
+    contact: '', // e.g. 'واتساب 05XXXXXXXX' — shown on the trial post when set
+  };
+  const fmt = (n) => n.toLocaleString('en-US');
+  document.getElementById('plans').innerHTML = OFFER.plans.map((p) => `
+    <div class="plan${p.best ? ' best' : ''}">${p.best ? '<div class="badge">الأكثر طلبًا</div>' : ''}
+      <div class="n">${p.name}</div><div class="u">${p.users}</div>
+      <div class="old">${fmt(p.old)}</div><div class="p">${fmt(p.price)} <small>ر.س</small></div>
+      <div class="once">مرة وحدة — للأبد</div></div>`).join('');
+  document.getElementById('note').textContent = OFFER.note;
+  if (OFFER.contact) document.getElementById('trial-cta').textContent = OFFER.contact;
+  const id = location.hash.slice(1) || 'hero';
+  document.getElementById(id)?.classList.add('on');
+</script>
+</body>
+</html>

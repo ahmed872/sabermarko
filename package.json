@@ -19,6 +19,8 @@
     "dist:win": "npm run build && electron-builder --win nsis",
     "guide:capture": "npm run build && node scripts/build-main.mjs --tools && playwright test --config scripts/guide/playwright.config.ts",
     "guide:pdf": "electron scripts/guide/build-pdf.cjs",
+    "marketing:capture": "npm run build && playwright test --config scripts/marketing/playwright.config.ts",
+    "marketing:render": "electron scripts/marketing/render.cjs",
     "license:keygen": "node tools/license/keygen.mjs",
     "license:issue": "node tools/license/issue.mjs",
     "typecheck:sim": "tsc -p tsconfig.sim.json --noEmit",

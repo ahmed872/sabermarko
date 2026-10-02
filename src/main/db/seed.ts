@@ -13,6 +13,8 @@ export const SYSTEM_UNITS: { name: string; symbol: string; kind: 'count' | 'weig
   { name: 'عبوة', symbol: 'عبوة', kind: 'count', allowDecimal: false },
   { name: 'دستة', symbol: 'دستة', kind: 'count', allowDecimal: false },
   { name: 'كانز', symbol: 'كانز', kind: 'count', allowDecimal: false },
+  { name: 'حبة', symbol: 'حبة', kind: 'count', allowDecimal: false },
+  { name: 'كرتون', symbol: 'كرتون', kind: 'count', allowDecimal: false },
   { name: 'باكو', symbol: 'باكو', kind: 'count', allowDecimal: false },
   { name: 'شريط', symbol: 'شريط', kind: 'count', allowDecimal: false },
   { name: 'رابطة', symbol: 'رابطة', kind: 'count', allowDecimal: false },

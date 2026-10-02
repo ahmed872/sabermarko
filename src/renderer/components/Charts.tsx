@@ -28,7 +28,8 @@ export function BarChart({ data, height = 220, valueKey = 'value', secondKey, la
           );
         })}
       </svg>
-      <div style={{ display: 'flex', flexDirection: 'row-reverse', marginTop: -26 }}>
+      {/* same order as the bars: first item on the right, most recent day on the left */}
+      <div style={{ display: 'flex', flexDirection: 'row', direction: 'rtl', marginTop: -26 }}>
         {data.map((d, i) => <div key={i} className="xs muted center" style={{ width: `${w}%`, overflow: 'hidden', whiteSpace: 'nowrap' }}>{label(d)}</div>)}
       </div>
       {hover !== null && data[hover] && (
