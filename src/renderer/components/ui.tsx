@@ -218,10 +218,14 @@ export function presetRange(p: Preset): Range {
 
 export function DateRangePicker({ value, onChange, presets = ['today', 'yesterday', 'week', 'month', 'lastMonth'] }: { value: Range; onChange: (r: Range) => void; presets?: Preset[] }) {
   const labels: Record<Preset, string> = { today: 'اليوم', yesterday: 'أمس', week: 'هذا الأسبوع', month: 'هذا الشهر', lastMonth: 'الشهر الماضي', '30': 'آخر 30 يوم', custom: 'مخصص' };
-  const active = presets.find((p) => { const r = presetRange(p); return r.from === value.from && r.to === value.to; });
+  // the button the user pressed stays highlighted even when two presets give the same dates
+  // (on a Saturday — the first day of the week — "this week" is the same day as "today")
+  const [chosen, setChosen] = useState<Preset | null>(null);
+  const same = (p: Preset) => { const r = presetRange(p); return r.from === value.from && r.to === value.to; };
+  const active = chosen && presets.includes(chosen) && same(chosen) ? chosen : presets.find(same);
   return (
     <div className="row wrap gap-sm">
-      <div className="seg">{presets.map((p) => <button key={p} type="button" className={active === p ? 'on' : ''} onClick={() => onChange(presetRange(p))}>{labels[p]}</button>)}</div>
+      <div className="seg">{presets.map((p) => <button key={p} type="button" className={active === p ? 'on' : ''} onClick={() => { setChosen(p); onChange(presetRange(p)); }}>{labels[p]}</button>)}</div>
       <input type="date" className="input" style={{ width: 150 }} value={value.from} max={value.to} onChange={(e) => e.target.value && onChange({ ...value, from: e.target.value })} aria-label="من" />
       <span className="muted">إلى</span>
       <input type="date" className="input" style={{ width: 150 }} value={value.to} min={value.from} onChange={(e) => e.target.value && onChange({ ...value, to: e.target.value })} aria-label="إلى" />
